@@ -3,7 +3,7 @@ import re
 import logging
 from urllib.parse import urlparse, urljoin
 
-import httpx
+import cloudscraper
 from bs4 import BeautifulSoup
 
 log = logging.getLogger("scraper")
@@ -44,14 +44,20 @@ def _domain(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
 
 
+def _make_scraper():
+    s = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows"})
+    s.headers.update(_HEADERS)
+    return s
+
+
 def scrape_chapter(url: str) -> dict:
     """Trả về dict: title, story_title, sentences, prev_url, next_url."""
     log.info("Scraping %s", url)
     base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
 
-    with httpx.Client(headers=_HEADERS, follow_redirects=True, timeout=20) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
+    s = _make_scraper()
+    resp = s.get(url, timeout=20)
+    resp.raise_for_status()
 
     soup = BeautifulSoup(resp.text, "html.parser")
     sel  = _SITE_SELECTORS.get(_domain(url), {})
@@ -147,9 +153,9 @@ def search_stories(query: str, base: str = "https://truyenfull.today") -> list[d
     url = f"{base}/tim-kiem/?tukhoa={query.replace(' ', '+')}"
     log.info("Searching: %s", url)
 
-    with httpx.Client(headers=_HEADERS, follow_redirects=True, timeout=15) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
+    s = _make_scraper()
+    resp = s.get(url, timeout=15)
+    resp.raise_for_status()
 
     soup    = BeautifulSoup(resp.text, "html.parser")
     items   = soup.select("div.list-truyen .row, .list-truyen div[itemscope]")

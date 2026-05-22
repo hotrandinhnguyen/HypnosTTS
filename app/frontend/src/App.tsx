@@ -423,6 +423,7 @@ export default function App() {
                     nextUrl={nextUrlRef.current}
                     onPrev={goToPrev}
                     onNext={goToNext}
+                    onJump={startStorySession}
                   />
                 </>
               )}

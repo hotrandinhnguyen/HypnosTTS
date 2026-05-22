@@ -51,7 +51,7 @@ async def _wait_disconnect(ws: WebSocket) -> None:
     """Chờ cho đến khi client đóng kết nối."""
     try:
         await ws.receive_text()
-    except (WebSocketDisconnect, Exception):
+    except Exception:
         pass
 
 
@@ -141,16 +141,22 @@ async def _process_story(ws: WebSocket, url: str, instruct: str) -> None:
             "cached": True,
         }))
         audio_map = {s["sequence"]: s["audio"] for s in cached["sentences"]}
-        for i, s in enumerate(cached["sentences"]):
+        for s in cached["sentences"]:
             await ws.send_text(json.dumps({"type": "text", "data": s["text"]}))
-            await ws.send_bytes(audio_map[i])
+            await ws.send_bytes(audio_map[s["sequence"]])
         await ws.send_text(json.dumps({"type": "done"}))
         return
 
     await ws.send_text(json.dumps({"type": "status", "data": "Đang tải chương..."}))
     from app.backend.scraper import scrape_chapter
     loop = asyncio.get_event_loop()
-    chapter = await loop.run_in_executor(None, scrape_chapter, url)
+    try:
+        chapter = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_chapter, url),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        raise ValueError("Tải trang quá lâu — thử lại sau.")
 
     await ws.send_text(json.dumps({
         "type":   "chapter_info",

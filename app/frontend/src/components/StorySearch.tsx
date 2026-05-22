@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Search, Play, Square } from 'lucide-react'
 import { Button } from './ui/button'
 
@@ -15,7 +15,15 @@ interface StorySearchProps {
   onStop: () => void
 }
 
-export function StorySearch({ isActive, onStartSession, onStop }: StorySearchProps) {
+const _DIGIT_RE = /\d+/
+
+function parseMaxChapter(latest: string | undefined): number | null {
+  if (!latest) return null
+  const m = _DIGIT_RE.exec(latest)
+  return m ? Number.parseInt(m[0], 10) : null
+}
+
+export function StorySearch({ isActive, onStartSession, onStop }: Readonly<StorySearchProps>) {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<StoryResult[]>([])
@@ -39,11 +47,20 @@ export function StorySearch({ isActive, onStartSession, onStop }: StorySearchPro
     setSearching(false)
   }
 
+  function handleSelectStory(r: StoryResult) {
+    setSelectedStory(r)
+    const max = parseMaxChapter(r.latest_chapter)
+    if (max) setChapterNum(max)
+  }
+
   function handleStart() {
     if (!selectedStory) return
     const url = `https://truyenfull.today/${selectedStory.slug}/chuong-${chapterNum}/`
+    setShowResults(false)
     onStartSession(url)
   }
+
+  const maxChapter = parseMaxChapter(selectedStory?.latest_chapter)
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -60,18 +77,15 @@ export function StorySearch({ isActive, onStartSession, onStop }: StorySearchPro
             autoComplete="off"
           />
         </div>
-        {!isActive ? (
-          <Button
-            onClick={doSearch}
-            disabled={searching}
-          >
-            <Search size={13} />
-            {searching ? 'Đang tìm...' : 'Tìm'}
-          </Button>
-        ) : (
+        {isActive ? (
           <Button variant="destructive" onClick={onStop}>
             <Square size={13} fill="currentColor" />
             Dừng
+          </Button>
+        ) : (
+          <Button onClick={doSearch} disabled={searching}>
+            <Search size={13} />
+            {searching ? 'Đang tìm...' : 'Tìm'}
           </Button>
         )}
       </div>
@@ -85,10 +99,11 @@ export function StorySearch({ isActive, onStartSession, onStop }: StorySearchPro
             </div>
           ) : (
             results.map(r => (
-              <div
+              <button
                 key={r.slug}
+                type="button"
                 className={`story-card ${selectedStory?.slug === r.slug ? 'selected' : ''}`}
-                onClick={() => setSelectedStory(r)}
+                onClick={() => handleSelectStory(r)}
               >
                 {r.cover ? (
                   <img
@@ -108,7 +123,7 @@ export function StorySearch({ isActive, onStartSession, onStop }: StorySearchPro
                     <div className="text-[11px] text-[#64748b]">{r.latest_chapter}</div>
                   )}
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -122,15 +137,21 @@ export function StorySearch({ isActive, onStartSession, onStop }: StorySearchPro
               {selectedStory.title}
             </span>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#2d3a52]">Chương</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#2d3a52]">
+                Chương
+              </span>
               <input
                 type="number"
                 min={1}
+                max={maxChapter ?? undefined}
                 value={chapterNum}
-                onChange={e => setChapterNum(parseInt(e.target.value, 10) || 1)}
+                onChange={e => setChapterNum(Number.parseInt(e.target.value, 10) || 1)}
                 onKeyDown={e => { if (e.key === 'Enter') handleStart() }}
                 className="chapter-num-input"
               />
+              {maxChapter && (
+                <span className="text-[10px] text-[#2d3a52]">/ {maxChapter}</span>
+              )}
             </div>
             <Button onClick={handleStart}>
               <Play size={13} fill="currentColor" />

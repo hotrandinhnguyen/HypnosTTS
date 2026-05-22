@@ -12,7 +12,7 @@ MAX_REVISIONS = 2
 def _route_after_review(state: GraphState) -> str:
     review = state.get("review") or {}
     revision_count = state.get("revision_count", 0)
-    if review.get("passed") or revision_count >= MAX_REVISIONS:
+    if review.get("passed") or revision_count > MAX_REVISIONS:
         return END
     return "writer"
 

@@ -4,7 +4,7 @@ import logging
 import concurrent.futures
 
 from tavily import TavilyClient
-from app.backend.config import TAVILY_API_KEY, DDG_MAX_RESULTS, DDG_TIMEOUT
+from app.backend.config import TAVILY_API_KEY, SEARCH_MAX_RESULTS, SEARCH_TIMEOUT
 
 log = logging.getLogger("web_search")
 
@@ -16,7 +16,7 @@ def _search_sync(query: str) -> list[dict]:
     try:
         response = _client.search(
             query,
-            max_results=DDG_MAX_RESULTS,
+            max_results=SEARCH_MAX_RESULTS,
             search_depth="advanced",
             include_answer=False,
         )
@@ -34,7 +34,7 @@ async def search(query: str) -> list[dict]:
     """Run a Tavily search in a thread pool with timeout. Returns list of {title, body, url}."""
     loop = asyncio.get_event_loop()
     try:
-        async with asyncio.timeout(DDG_TIMEOUT):
+        async with asyncio.timeout(SEARCH_TIMEOUT):
             results = await loop.run_in_executor(_executor, _search_sync, query)
         log.info("Tavily %r → %d results", query, len(results))
         return results

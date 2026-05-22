@@ -8,6 +8,9 @@ from bs4 import BeautifulSoup
 
 log = logging.getLogger("scraper")
 
+_HTML_PARSER = "html.parser"
+_BASE_URL    = "https://truyenfull.today"
+
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -18,7 +21,6 @@ _HEADERS = {
     "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
 }
 
-# Selector cho từng trang — thêm vào đây nếu muốn hỗ trợ trang mới
 _SITE_SELECTORS: dict[str, dict] = {
     "truyenfull.today": {
         "content": "#chapter-c",
@@ -29,15 +31,14 @@ _SITE_SELECTORS: dict[str, dict] = {
     },
 }
 
-# Pattern quảng cáo / watermark thường thấy trong truyện Việt
 _AD_PATTERNS = re.compile(
     r"(nguồn\s*:?\s*truyenfull|vui lòng đọc tại|https?://\S+|"
     r"truyenfull\.today|hãy ủng hộ|đọc tiếp tại|follow\s+us)",
     re.IGNORECASE,
 )
 
-# Tách câu: dừng ở . ? ! … nhưng không tách Mr./Dr./số thập phân
-_SENT_SPLIT = re.compile(r'(?<=[.!?…])\s+(?=[^\s])')
+_SENT_SPLIT  = re.compile(r'(?<=[.!?…])\s+(?=[^\s])')
+_CHAP_NUM_RE = re.compile(r"chuong-(\d+)")
 
 
 def _domain(url: str) -> str:
@@ -50,49 +51,64 @@ def _make_scraper():
     return s
 
 
+def _fetch_soup(url: str, timeout: int = 20) -> BeautifulSoup:
+    resp = _make_scraper().get(url, timeout=timeout)
+    resp.raise_for_status()
+    return BeautifulSoup(resp.text, _HTML_PARSER)
+
+
+def _sel_text(soup: BeautifulSoup, css: str) -> str:
+    el = soup.select_one(css) if css else None
+    return el.get_text(strip=True) if el else ""
+
+
+def _parse_nav_link(soup: BeautifulSoup, css: str, base: str) -> str | None:
+    if not css:
+        return None
+    el = soup.select_one(css)
+    if not el:
+        return None
+    href = el.get("href", "")
+    if not href:
+        return None
+    return href if href.startswith("http") else urljoin(base, href)
+
+
+def _parse_max_pagination(soup: BeautifulSoup) -> int:
+    total = 1
+    for el in soup.select(".pagination li a[href]"):
+        try:
+            pg = int(el.get_text(strip=True))
+            if pg > total:
+                total = pg
+        except ValueError:
+            pass
+    return total
+
+
 def scrape_chapter(url: str) -> dict:
     """Trả về dict: title, story_title, sentences, prev_url, next_url."""
     log.info("Scraping %s", url)
-    base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+    parsed = urlparse(url)
+    base   = f"{parsed.scheme}://{parsed.netloc}"
+    soup   = _fetch_soup(url, timeout=20)
+    sel    = _SITE_SELECTORS.get(_domain(url), {})
 
-    s = _make_scraper()
-    resp = s.get(url, timeout=20)
-    resp.raise_for_status()
+    title       = _sel_text(soup, sel.get("title", "")) or _guess_title(soup)
+    story_title = _sel_text(soup, sel.get("story", ""))
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    sel  = _SITE_SELECTORS.get(_domain(url), {})
-
-    # ── Title ──────────────────────────────────────────────────
-    title_el = soup.select_one(sel.get("title", "")) if sel.get("title") else None
-    title = title_el.get_text(strip=True) if title_el else _guess_title(soup)
-
-    story_el = soup.select_one(sel.get("story", "")) if sel.get("story") else None
-    story_title = story_el.get_text(strip=True) if story_el else ""
-
-    # ── Content ────────────────────────────────────────────────
     content_el = soup.select_one(sel.get("content", "")) if sel.get("content") else None
     if content_el is None:
         content_el = _find_main_content(soup)
     if content_el is None:
         raise ValueError("Không tìm thấy nội dung chương — thử URL khác.")
 
-    raw = content_el.get_text(separator="\n")
-    sentences = _extract_sentences(raw)
+    sentences = _extract_sentences(content_el.get_text(separator="\n"))
     if not sentences:
         raise ValueError("Nội dung chương trống sau khi làm sạch.")
 
-    # ── Prev / Next ────────────────────────────────────────────
-    def _nav(css: str) -> str | None:
-        if not css:
-            return None
-        el = soup.select_one(css)
-        if el and el.get("href"):
-            href = el["href"]
-            return href if href.startswith("http") else urljoin(base, href)
-        return None
-
-    prev_url = _nav(sel.get("prev", ""))
-    next_url = _nav(sel.get("next", ""))
+    prev_url = _parse_nav_link(soup, sel.get("prev", ""), base)
+    next_url = _parse_nav_link(soup, sel.get("next", ""), base)
 
     log.info("Scraped %d sentences | prev=%s | next=%s", len(sentences), prev_url, next_url)
     return {
@@ -109,14 +125,9 @@ def _extract_sentences(raw: str) -> list[str]:
     sentences: list[str] = []
     for line in raw.splitlines():
         line = line.strip()
-        if not line or len(line) < 4:
+        if len(line) < 4 or _AD_PATTERNS.search(line):
             continue
-        # Bỏ dòng quảng cáo
-        if _AD_PATTERNS.search(line):
-            continue
-        # Tách câu trong dòng
-        parts = _SENT_SPLIT.split(line)
-        for part in parts:
+        for part in _SENT_SPLIT.split(line):
             part = part.strip()
             if len(part) >= 4:
                 sentences.append(part)
@@ -148,24 +159,50 @@ def _parse_story_item(item, base: str) -> dict | None:
     }
 
 
-def search_stories(query: str, base: str = "https://truyenfull.today") -> list[dict]:
-    """Tìm kiếm truyện trên truyenfull.today, trả về [{title, slug, latest_chapter, cover}]."""
-    url = f"{base}/tim-kiem/?tukhoa={query.replace(' ', '+')}"
+def search_stories(query: str, base: str = _BASE_URL) -> list[dict]:
+    """Tìm kiếm truyện, trả về [{title, slug, latest_chapter, cover}]."""
+    url  = f"{base}/tim-kiem/?tukhoa={query.replace(' ', '+')}"
     log.info("Searching: %s", url)
-
-    s = _make_scraper()
-    resp = s.get(url, timeout=15)
-    resp.raise_for_status()
-
-    soup    = BeautifulSoup(resp.text, "html.parser")
+    soup = _fetch_soup(url, timeout=15)
     items   = soup.select("div.list-truyen .row, .list-truyen div[itemscope]")
     results = [r for item in items if (r := _parse_story_item(item, base))]
     log.info("Found %d results for %r", len(results), query)
     return results
 
 
-def build_chapter_url(slug: str, chapter: int, base: str = "https://truyenfull.today") -> str:
+def build_chapter_url(slug: str, chapter: int, base: str = _BASE_URL) -> str:
     return f"{base}/{slug}/chuong-{chapter}/"
+
+
+def _parse_chapter_links(soup: BeautifulSoup, slug: str, base: str) -> list[dict]:
+    chapters: list[dict] = []
+    seen: set[int] = set()
+    for a in soup.select("ul.list-chapter li a, .list-chapter a"):
+        href  = a.get("href", "")
+        m     = _CHAP_NUM_RE.search(href)
+        num   = int(m.group(1)) if m else 0
+        if num and num not in seen:
+            seen.add(num)
+            chapters.append({
+                "num":   num,
+                "title": a.get_text(strip=True),
+                "url":   href if href.startswith("http") else f"{base}/{slug}/chuong-{num}/",
+            })
+    chapters.sort(key=lambda c: c["num"])
+    return chapters
+
+
+def get_chapter_list(slug: str, page: int = 1, base: str = _BASE_URL) -> dict:
+    """Trả về {chapters: [{num, title, url}], total_pages, current_page}."""
+    url  = f"{base}/{slug}/" if page == 1 else f"{base}/{slug}/trang-{page}/"
+    log.info("Fetching chapter list page %d: %s", page, url)
+    soup = _fetch_soup(url, timeout=15)
+
+    chapters    = _parse_chapter_links(soup, slug, base)
+    total_pages = _parse_max_pagination(soup)
+
+    log.info("Chapter list: %d chapters, %d total pages", len(chapters), total_pages)
+    return {"chapters": chapters, "total_pages": total_pages, "current_page": page}
 
 
 def _find_main_content(soup: BeautifulSoup):

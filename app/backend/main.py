@@ -51,7 +51,7 @@ async def _wait_disconnect(ws: WebSocket) -> None:
     """Chờ cho đến khi client đóng kết nối."""
     try:
         await ws.receive_text()
-    except (WebSocketDisconnect, Exception):
+    except Exception:
         pass
 
 
@@ -141,16 +141,22 @@ async def _process_story(ws: WebSocket, url: str, instruct: str) -> None:
             "cached": True,
         }))
         audio_map = {s["sequence"]: s["audio"] for s in cached["sentences"]}
-        for i, s in enumerate(cached["sentences"]):
+        for s in cached["sentences"]:
             await ws.send_text(json.dumps({"type": "text", "data": s["text"]}))
-            await ws.send_bytes(audio_map[i])
+            await ws.send_bytes(audio_map[s["sequence"]])
         await ws.send_text(json.dumps({"type": "done"}))
         return
 
     await ws.send_text(json.dumps({"type": "status", "data": "Đang tải chương..."}))
     from app.backend.scraper import scrape_chapter
     loop = asyncio.get_event_loop()
-    chapter = await loop.run_in_executor(None, scrape_chapter, url)
+    try:
+        chapter = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_chapter, url),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        raise ValueError("Tải trang quá lâu — thử lại sau.")
 
     await ws.send_text(json.dumps({
         "type":   "chapter_info",
@@ -220,6 +226,23 @@ async def story_search(q: str = ""):
     loop = asyncio.get_event_loop()
     results = await loop.run_in_executor(None, search_stories, q.strip())
     return JSONResponse(results)
+
+
+@app.get("/api/story/chapters")
+async def story_chapters(slug: str = "", page: int = 1):
+    if not slug.strip():
+        return JSONResponse({"chapters": [], "total_pages": 0, "current_page": 1})
+    from app.backend.scraper import get_chapter_list
+    loop = asyncio.get_event_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, get_chapter_list, slug.strip(), page),
+            timeout=15,
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        log.warning("Chapter list failed for %r: %s", slug, e)
+        return JSONResponse({"chapters": [], "total_pages": 0, "current_page": page})
 
 
 @app.get("/api/voices")

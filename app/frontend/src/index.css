@@ -306,6 +306,10 @@ body::after {
   background: linear-gradient(135deg, var(--violet-2), var(--cyan));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
+.page-title-accent.story-accent {
+  background: linear-gradient(135deg, var(--cyan), #38bdf8);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
 .page-subtitle { font-size: 12px; color: var(--text-muted); }
 
 /* ── Page body ───────────────────────────────────────────────── */
@@ -510,6 +514,112 @@ body::after {
   border-color: var(--violet);
   box-shadow: 0 0 0 3px var(--violet-dim);
 }
+
+/* ── Learn page — topic suggestions ─────────────────────────── */
+.learn-section-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .14em;
+  color: var(--text-dim);
+}
+
+.learn-domain-row {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.learn-domain-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  padding-left: 2px;
+}
+
+.learn-chips-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+
+.topic-chip {
+  padding: 5px 13px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--b);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 500; font-family: var(--font);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  position: relative; overflow: hidden;
+}
+.topic-chip::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--violet-dim), rgba(34,211,238,.06));
+  opacity: 0; transition: opacity .15s;
+}
+.topic-chip:hover {
+  border-color: rgba(139,92,246,.3);
+  color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+}
+.topic-chip:hover::before { opacity: 1; }
+.topic-chip.active {
+  border-color: var(--violet);
+  color: var(--violet-2); font-weight: 600;
+  background: var(--violet-dim);
+  box-shadow: 0 0 0 1px var(--violet-glow), 0 4px 14px rgba(139,92,246,.15);
+}
+.topic-chip.active::before { opacity: 1; }
+
+/* ── Learn page — domain tab bar ────────────────────────────── */
+.learn-suggestions {
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+.learn-tab-bar {
+  display: flex; align-items: center; gap: 4px;
+}
+
+.learn-tabs {
+  display: flex; gap: 4px;
+  overflow-x: auto; scroll-behavior: smooth;
+  flex: 1; min-width: 0;
+  scrollbar-width: none;
+}
+.learn-tabs::-webkit-scrollbar { display: none; }
+
+.learn-domain-tab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 11px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--b);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 500; font-family: var(--font);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.learn-domain-tab:hover { border-color: rgba(139,92,246,.3); color: var(--text); }
+.learn-domain-tab.active {
+  border-color: var(--violet);
+  color: var(--violet-2); font-weight: 600;
+  background: var(--violet-dim);
+  box-shadow: 0 0 0 1px var(--violet-glow);
+}
+
+.learn-tab-arrow {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--b);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+.learn-tab-arrow:hover { border-color: var(--b-accent); color: var(--text); }
 
 /* ── Scrollbars ──────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }

@@ -45,6 +45,56 @@ const DOMAINS: Domain[] = [
     icon: '☁️',
     topics: ['AWS Lambda', 'Microservices', 'Load Balancing', 'CDN', 'API Gateway', 'Event-Driven Architecture', 'CQRS', 'Service Mesh'],
   },
+  {
+    label: 'Kinh tế & Tài chính',
+    icon: '💰',
+    topics: ['Lãi suất', 'Lạm phát', 'GDP', 'Cổ phiếu', 'Trái phiếu', 'Forex', 'Phân tích kỹ thuật', 'Quỹ ETF', 'Đòn bẩy tài chính', 'Dòng tiền'],
+  },
+  {
+    label: 'Đầu tư & Thị trường',
+    icon: '📈',
+    topics: ['Giá trị nội tại', 'P/E Ratio', 'Phân tích cơ bản', 'Quản lý rủi ro', 'Danh mục đầu tư', 'Market Cap', 'Short Selling', 'Options'],
+  },
+  {
+    label: 'Data Science & Analytics',
+    icon: '📊',
+    topics: ['Pandas', 'NumPy', 'Data Visualization', 'Thống kê', 'A/B Testing', 'Feature Engineering', 'Data Pipeline', 'Power BI'],
+  },
+  {
+    label: 'Mobile Development',
+    icon: '📱',
+    topics: ['React Native', 'Flutter', 'SwiftUI', 'Jetpack Compose', 'PWA', 'App Store Optimization', 'Push Notification', 'Deep Link'],
+  },
+  {
+    label: 'Blockchain & Web3',
+    icon: '🔗',
+    topics: ['Smart Contract', 'DeFi', 'NFT', 'Ethereum', 'Consensus Mechanism', 'Layer 2', 'DAO', 'Tokenomics'],
+  },
+  {
+    label: 'Mạng & Hệ thống',
+    icon: '📡',
+    topics: ['TCP/IP', 'DNS', 'HTTP/2 & HTTP/3', 'WebRTC', 'VPN', 'OSI Model', 'BGP', 'Firewall'],
+  },
+  {
+    label: 'Toán học & Thuật toán',
+    icon: '📐',
+    topics: ['Big O Notation', 'Dynamic Programming', 'Graph Theory', 'Linear Algebra', 'Xác suất thống kê', 'Đệ quy', 'Binary Search', 'Sorting Algorithms'],
+  },
+  {
+    label: 'Kinh doanh & Quản lý',
+    icon: '🏢',
+    topics: ['OKR', 'Agile & Scrum', 'Product Management', 'Design Thinking', 'Lean Startup', 'Business Model Canvas', 'Go-to-Market', 'KPI'],
+  },
+  {
+    label: 'Tâm lý học',
+    icon: '🧠',
+    topics: ['Cognitive Bias', 'Tư duy phản biện', 'Hiệu ứng Dunning-Kruger', 'Tâm lý hành vi', 'Flow State', 'Growth Mindset', 'Hiệu ứng mỏ neo', 'Tâm lý đám đông'],
+  },
+  {
+    label: 'Khoa học & Vũ trụ',
+    icon: '🔭',
+    topics: ['Cơ học lượng tử', 'Thuyết tương đối', 'CRISPR', 'Biến đổi khí hậu', 'Vũ trụ học', 'Hố đen', 'Năng lượng tái tạo', 'Trí tuệ nhân tạo tổng quát'],
+  },
 ]
 
 export function LearnPage({ isActive, onStart, onStop }: Readonly<LearnPageProps>) {

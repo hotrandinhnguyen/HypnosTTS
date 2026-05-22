@@ -19,7 +19,8 @@ build/
 /data/
 /download
 /local/
-/run*
+/run*/
+!/run.bat
 example.py
 results/
 examples/data*

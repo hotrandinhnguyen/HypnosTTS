@@ -17,6 +17,10 @@ TTS_INSTRUCT: str = os.getenv("TTS_INSTRUCT", "male, calm, low pitch")
 
 DB_PATH: Path = Path("app/data/lessons.db")
 
+TAVILY_API_KEY: str = os.environ["TAVILY_API_KEY"]
+DDG_MAX_RESULTS: int = int(os.getenv("SEARCH_MAX_RESULTS", "5"))
+DDG_TIMEOUT: float = float(os.getenv("SEARCH_TIMEOUT", "10"))
+
 VOICE_PRESETS: dict[str, str] = {
     "male_mid":     "male, low pitch, middle-aged",
     "male_young":   "male, moderate pitch, young adult",

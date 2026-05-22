@@ -33,7 +33,7 @@ async def _generate_queries(topic: str) -> list[str]:
 
 
 async def _run_searches(queries: list[str]) -> str:
-    results_lists = await asyncio.gather(*[search(q, timeout=5.0) for q in queries])
+    results_lists = await asyncio.gather(*[search(q) for q in queries])
     snippets: list[str] = []
     for query, results in zip(queries, results_lists):
         snippets.append(f"[Query: {query}]")

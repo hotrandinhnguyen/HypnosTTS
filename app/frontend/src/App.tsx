@@ -368,17 +368,17 @@ export default function App() {
                 </h1>
                 <p className="page-subtitle">{meta.subtitle}</p>
               </div>
+            </header>
 
-              {/* Voice picker in header */}
+            {/* Page body */}
+            <div className="page-body">
+
+              {/* Voice picker */}
               <VoicePicker
                 voices={voices}
                 selectedKey={selectedVoice?.key ?? ''}
                 onSelect={setSelectedVoice}
               />
-            </header>
-
-            {/* Page body */}
-            <div className="page-body">
 
               {/* Learn page */}
               {activePage === 'learn' && (

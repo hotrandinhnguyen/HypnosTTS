@@ -4,10 +4,8 @@ import {
   useRef,
   useCallback,
 } from 'react'
-import { Play, Square, Search } from 'lucide-react'
 
 import { useAudio } from './hooks/useAudio'
-import { Button } from './components/ui/button'
 import { NavSidebar } from './components/NavSidebar'
 import type { Page } from './components/NavSidebar'
 import type { HistoryItem } from './components/Sidebar'
@@ -15,8 +13,8 @@ import { VoicePicker } from './components/VoicePicker'
 import type { Voice } from './components/VoicePicker'
 import { StatusBar } from './components/StatusBar'
 import { PlayerCard } from './components/PlayerCard'
-import { ChapterNav } from './components/ChapterNav'
-import { StorySearch } from './components/StorySearch'
+import { LearnPage } from './components/LearnPage'
+import { StoryPage } from './components/StoryPage'
 
 type CardDotState = 'idle' | 'playing' | 'done'
 
@@ -24,7 +22,7 @@ const PAGE_META: Record<Page, { title: string; titleAccent: string; subtitle: st
   learn: {
     title: 'Học',
     titleAccent: 'Tập',
-    subtitle: 'AI tổng hợp bài học · TTS giọng nhất quán',
+    subtitle: 'AI nghiên cứu · tổng hợp analogy · TTS giọng nhất quán',
   },
   story: {
     title: 'Đọc',
@@ -41,11 +39,8 @@ export default function App() {
   // ── Page ──────────────────────────────────────────────────────
   const [activePage, setActivePage] = useState<Page>('learn')
 
-  // ── Learn tab ─────────────────────────────────────────────────
-  const [topic, setTopic] = useState('')
+  // ── Session state ─────────────────────────────────────────────
   const [learnActive, setLearnActive] = useState(false)
-
-  // ── Story tab ─────────────────────────────────────────────────
   const [storyActive, setStoryActive] = useState(false)
 
   // ── Auto-play ─────────────────────────────────────────────────
@@ -104,13 +99,9 @@ export default function App() {
 
   async function loadHistory() {
     try {
-      if (activePage === 'story') {
-        const rows: HistoryItem[] = await (await fetch('/api/story/history')).json()
-        setHistoryItems(rows)
-      } else {
-        const rows: HistoryItem[] = await (await fetch('/api/history')).json()
-        setHistoryItems(rows)
-      }
+      const url = activePage === 'story' ? '/api/story/history' : '/api/history'
+      const rows: HistoryItem[] = await (await fetch(url)).json()
+      setHistoryItems(rows)
     } catch (e) {
       console.error('[History]', e)
     }
@@ -175,7 +166,6 @@ export default function App() {
       setCardDotState('done')
       resetButtons()
       loadHistory()
-      // Auto-play: start countdown if next chapter exists
       if (autoPlay && nextUrlRef.current) {
         const next = nextUrlRef.current
         let secs = 3
@@ -252,9 +242,7 @@ export default function App() {
       setStatusVisible(true)
       resetButtons()
     }
-    ws.onclose = () => {
-      resetButtons()
-    }
+    ws.onclose = () => { resetButtons() }
     return ws
   }
 
@@ -265,7 +253,7 @@ export default function App() {
     wsRef.current = null
   }
 
-  // ── Cancel auto-play countdown ───────────────────────────────
+  // ── Cancel auto-play countdown ────────────────────────────────
   function cancelAutoPlay() {
     if (countdownRef.current) {
       clearInterval(countdownRef.current)
@@ -288,14 +276,12 @@ export default function App() {
   }
 
   // ── Learn session ─────────────────────────────────────────────
-  function startLearnSession() {
-    const t = topic.trim()
-    if (!t) return
-    setCurrentTopic(t)
+  function startLearnSession(topic: string) {
+    setCurrentTopic(topic)
     setStatusMsg('Đang kết nối...')
     setStatusVisible(true)
     setLearnActive(true)
-    openWs('/ws/lesson', { topic: t, instruct: selectedVoice?.instruct || '' })
+    openWs('/ws/lesson', { topic, instruct: selectedVoice?.instruct || '' })
   }
 
   // ── Story session ─────────────────────────────────────────────
@@ -314,23 +300,19 @@ export default function App() {
     setActiveHistoryId(item.id)
     audio.ensureCtx(volumeRef.current)
     resetPlayer()
-
     try {
       const lessons: { sequence: number; text: string; audio: string }[] = await (
         await fetch(`/api/session/${item.id}`)
       ).json()
-
       for (const lesson of lessons) {
         setTotalSentences(prev => prev + 1)
         const span = appendSentenceSpan(lesson.text)
-
         const raw = atob(lesson.audio)
         const ab = new ArrayBuffer(raw.length)
         const view = new Uint8Array(ab)
         for (let i = 0; i < raw.length; i++) view[i] = raw.codePointAt(i)! & 0xff
         const buf = await audio.decodeWav(ab)
         audio.addSessionBuffer(buf)
-
         const obs = new MutationObserver(() => {
           if (span.classList.contains('done')) {
             setPlayedCount(prev => prev + 1)
@@ -340,7 +322,6 @@ export default function App() {
         obs.observe(span, { attributes: true, attributeFilter: ['class'] })
         audio.scheduleBuffer(buf, span)
       }
-
       setProgressVisible(true)
       setControlsVisible(true)
       setDownloadVisible(true)
@@ -366,24 +347,18 @@ export default function App() {
   }
 
   // ── Chapter nav ───────────────────────────────────────────────
-  function goToPrev() {
-    if (prevUrlRef.current) startStorySession(prevUrlRef.current)
-  }
-  function goToNext() {
-    if (nextUrlRef.current) startStorySession(nextUrlRef.current)
-  }
+  function goToPrev() { if (prevUrlRef.current) startStorySession(prevUrlRef.current) }
+  function goToNext() { if (nextUrlRef.current) startStorySession(nextUrlRef.current) }
 
   const meta = PAGE_META[activePage]
 
   return (
     <>
-      {/* Orbs */}
       <div className="orb orb-1" />
       <div className="orb orb-2" />
       <div className="orb orb-3" />
       <div className="orb orb-4" />
 
-      {/* Layout */}
       <div className="app-layout">
         <NavSidebar
           activePage={activePage}
@@ -393,7 +368,6 @@ export default function App() {
           onHistorySelect={handleHistorySelect}
         />
 
-        {/* Main content — key triggers .page-enter animation on page switch */}
         <div className="main-content">
           <div key={activePage} className="page-enter" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
@@ -402,7 +376,9 @@ export default function App() {
               <div className="page-title-group">
                 <h1 className="page-title">
                   {meta.title}
-                  <span className="page-title-accent"> {meta.titleAccent}</span>
+                  <span className={`page-title-accent ${activePage === 'story' ? 'story-accent' : ''}`}>
+                    {' '}{meta.titleAccent}
+                  </span>
                 </h1>
                 <p className="page-subtitle">{meta.subtitle}</p>
               </div>
@@ -411,69 +387,43 @@ export default function App() {
             {/* Page body */}
             <div className="page-body">
 
-              {/* Voice picker */}
               <VoicePicker
                 voices={voices}
                 selectedKey={selectedVoice?.key ?? ''}
                 onSelect={setSelectedVoice}
               />
 
-              {/* Learn page */}
+              {/* ── Learn page ─────────────────────────────── */}
               {activePage === 'learn' && (
-                <div className="flex gap-2.5 items-center">
-                  <div className="flex-1 relative flex items-center">
-                    <Search size={16} className="absolute left-4 text-[#64748b] pointer-events-none" />
-                    <input
-                      className="glass-input"
-                      placeholder="Nhập chủ đề muốn học (VD: Deep Learning, Docker, React hooks...)"
-                      value={topic}
-                      onChange={e => setTopic(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && !learnActive) startLearnSession() }}
-                      autoComplete="off"
-                    />
-                  </div>
-                  {learnActive ? (
-                    <Button variant="destructive" onClick={stopActive}>
-                      <Square size={13} fill="currentColor" />
-                      Dừng
-                    </Button>
-                  ) : (
-                    <Button onClick={startLearnSession}>
-                      <Play size={13} fill="currentColor" />
-                      Bắt đầu
-                    </Button>
-                  )}
-                </div>
+                <LearnPage
+                  isActive={learnActive}
+                  onStart={startLearnSession}
+                  onStop={stopActive}
+                />
               )}
 
-              {/* Story page */}
+              {/* ── Story page ─────────────────────────────── */}
               {activePage === 'story' && (
-                <>
-                  <StorySearch
-                    isActive={storyActive}
-                    onStartSession={startStorySession}
-                    onStop={stopActive}
-                  />
-                  <ChapterNav
-                    visible={chapterNavVisible}
-                    chapterTitle={chapterTitle}
-                    prevUrl={prevUrlRef.current}
-                    nextUrl={nextUrlRef.current}
-                    onPrev={goToPrev}
-                    onNext={goToNext}
-                    onJump={startStorySession}
-                    autoPlay={autoPlay}
-                    onAutoPlayChange={setAutoPlay}
-                    autoPlayCountdown={autoPlayCountdown}
-                    onCancelAutoPlay={cancelAutoPlay}
-                  />
-                </>
+                <StoryPage
+                  isActive={storyActive}
+                  onStartSession={startStorySession}
+                  onStop={stopActive}
+                  chapterNavVisible={chapterNavVisible}
+                  chapterTitle={chapterTitle}
+                  prevUrl={prevUrlRef.current}
+                  nextUrl={nextUrlRef.current}
+                  onPrev={goToPrev}
+                  onNext={goToNext}
+                  onJump={startStorySession}
+                  autoPlay={autoPlay}
+                  onAutoPlayChange={setAutoPlay}
+                  autoPlayCountdown={autoPlayCountdown}
+                  onCancelAutoPlay={cancelAutoPlay}
+                />
               )}
 
-              {/* Status bar */}
               <StatusBar message={statusMsg} visible={statusVisible} />
 
-              {/* Player card */}
               <PlayerCard
                 audio={audio}
                 captionRef={captionRef}

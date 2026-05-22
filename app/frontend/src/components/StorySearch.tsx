@@ -223,8 +223,8 @@ export function StorySearch({ isActive, onStartSession, onStop }: Readonly<Story
 
           {/* Chapter list panel */}
           {showChapters && (
-            <div className="flex flex-col gap-1">
-              <div className="max-h-[200px] overflow-y-auto flex flex-col gap-0.5 pr-0.5">
+            <div className="flex flex-col gap-1 rounded-xl border border-white/[.06] bg-[rgba(10,15,32,.7)] p-2">
+              <div className="max-h-[220px] overflow-y-auto flex flex-col gap-0.5">
                 {chapters.length === 0 && !loadingChaps && (
                   <div className="text-[12px] text-[#64748b] italic py-2 px-2">
                     Không tải được danh sách chương.
@@ -234,10 +234,10 @@ export function StorySearch({ isActive, onStartSession, onStop }: Readonly<Story
                   <button
                     key={ch.num}
                     type="button"
-                    className="text-left px-3 py-1.5 rounded-lg text-[12px] text-[#94a3b8] hover:bg-[rgba(139,92,246,.1)] hover:text-[#c4b5fd] transition-colors truncate"
+                    className="text-left px-3 py-2 rounded-lg text-[12px] text-slate-300 hover:bg-[rgba(139,92,246,.15)] hover:text-[#c4b5fd] transition-colors truncate w-full"
                     onClick={() => handleStartChapter(ch.url)}
                   >
-                    <span className="font-mono text-[10px] text-[#4a5568] mr-2">{ch.num}</span>
+                    <span className="font-mono text-[10px] text-[#64748b] mr-2 inline-block w-8 text-right flex-shrink-0">{ch.num}</span>
                     {ch.title}
                   </button>
                 ))}

@@ -1,19 +1,20 @@
 import asyncio
 import logging
+import re
 import time
 from typing import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 
 from app.backend.config import REF_AUDIO_PATH, REF_TEXT_PATH, TTS_NUM_STEPS, TTS_INSTRUCT
-from app.backend.schemas import EnrichedOutline
-from app.backend.agents.planner import planner_node
-from app.backend.agents.researcher import researcher_node
-from app.backend.agents.writer import write
+from app.backend.graph import build_graph
 import app.backend.tts_engine as tts_engine
 
 log = logging.getLogger("pipeline")
 
 _executor = ThreadPoolExecutor(max_workers=1)
+_graph = build_graph()
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])\s+(?=[^\s])|(?<=\.)\s*\n+")
 
 
 def _ref_text() -> str:
@@ -35,75 +36,78 @@ async def _synthesize_async(text: str, instruct: str) -> bytes:
     return result
 
 
-async def _writer_producer(
-    outline: EnrichedOutline,
-    sentence_queue: "asyncio.Queue[str | None]",
-):
-    count = 0
-    async for sentence in write(outline):
-        count += 1
-        log.debug("[WRITER] #%d %r", count, sentence[:80])
-        await sentence_queue.put(sentence)
-    log.info("[WRITER] finished, %d sentences", count)
-    await sentence_queue.put(None)
+def _status_message(event: dict) -> str:
+    status = event.get("status", "")
+    if status == "researched":
+        return "Đang tạo phép ẩn dụ..."
+    if status == "analogy_done":
+        return "Đang viết bài giảng..."
+    if status == "written" and event.get("revision_count", 0) > 0:
+        return f"Đang kiểm tra và tinh chỉnh (lần {event['revision_count']})..."
+    if status == "reviewed":
+        review = event.get("review") or {}
+        if not review.get("passed") and event.get("revision_count", 0) < 2:
+            return "Đang viết lại để cải thiện..."
+    return ""
 
 
-async def _tts_consumer(
-    sentence_queue: "asyncio.Queue[str | None]",
-    out_queue: "asyncio.Queue[dict | None]",
-    instruct: str,
-):
-    idx = 0
-    while True:
-        sentence = await sentence_queue.get()
-        if sentence is None:
-            break
-        idx += 1
-        log.info("[TTS] rendering #%d...", idx)
-        audio = await _synthesize_async(sentence, instruct)
-        log.info("[TTS] #%d done (%d bytes)", idx, len(audio))
-        await out_queue.put({"type": "text", "data": sentence, "audio": audio})
-    await out_queue.put(None)
+def _split_sentences(script: str) -> list[str]:
+    parts = _SENTENCE_SPLIT.split(script)
+    sentences: list[str] = []
+    for part in parts:
+        part = part.strip()
+        if len(part) >= 4:
+            sentences.append(part)
+    return sentences
 
 
 async def run(topic: str, instruct: str = TTS_INSTRUCT) -> AsyncIterator[dict]:
     t_total = time.perf_counter()
 
-    # ── Phase 1: Planner ─────────────────────────────────────────────────────
-    yield {"type": "status", "data": "Planner đang phân tích chủ đề..."}
-    log.info("[PLANNER] START topic=%r", topic)
-    t0 = time.perf_counter()
-    state = {"topic": topic, "outline": None, "enriched_outline": None, "status": ""}
-    planner_out = await planner_node(state)
-    log.info("[PLANNER] DONE (%.2fs)", time.perf_counter() - t0)
+    # ── Phase 1: Run full graph (Researcher → Analogy → Writer → Reviewer loop) ──
+    yield {"type": "status", "data": "Đang nghiên cứu chủ đề..."}
+    log.info("[PIPELINE] START topic=%r", topic)
 
-    # ── Phase 2: Researcher ───────────────────────────────────────────────────
-    yield {"type": "status", "data": "Researcher đang làm phong phú khái niệm..."}
-    log.info("[RESEARCHER] START")
-    t0 = time.perf_counter()
-    researcher_out = await researcher_node({**state, **planner_out})
-    log.info("[RESEARCHER] DONE (%.2fs)", time.perf_counter() - t0)
+    initial_state = {
+        "topic": topic,
+        "instruct": instruct,
+        "research": None,
+        "analogy": None,
+        "script": None,
+        "review": None,
+        "revision_count": 0,
+        "status": "",
+    }
 
-    enriched = EnrichedOutline(**researcher_out["enriched_outline"])
+    state = None
+    async for event in _graph.astream(initial_state, stream_mode="values"):
+        msg = _status_message(event)
+        if msg:
+            yield {"type": "status", "data": msg}
+        state = event
 
-    # ── Phase 3: Writer + TTS song song ──────────────────────────────────────
-    yield {"type": "status", "data": "Writer đang viết — TTS đang render từng câu..."}
-    log.info("[WRITER+TTS] START concurrent | instruct=%r", instruct)
+    if not state or not state.get("script"):
+        log.error("[PIPELINE] No script generated")
+        yield {"type": "error", "data": "Không tạo được nội dung."}
+        return
 
-    sentence_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=4)
-    out_queue: asyncio.Queue[dict | None] = asyncio.Queue()
+    script = state["script"]
+    log.info("[PIPELINE] Graph done in %.2fs — script: %d chars", time.perf_counter() - t_total, len(script))
 
-    producer = asyncio.create_task(_writer_producer(enriched, sentence_queue))
-    consumer = asyncio.create_task(_tts_consumer(sentence_queue, out_queue, instruct))
+    review = state.get("review") or {}
+    issues = review.get("issues", [])
+    if issues:
+        log.info("[PIPELINE] Reviewer issues (accepted anyway): %s", issues)
 
-    while True:
-        item = await out_queue.get()
-        if item is None:
-            break
-        yield item
+    # ── Phase 2: Stream sentences to TTS ─────────────────────────────────────────
+    yield {"type": "status", "data": "Đang render giọng đọc..."}
+    sentences = _split_sentences(script)
+    log.info("[TTS] Streaming %d sentences", len(sentences))
 
-    await producer
-    await consumer
+    for i, sentence in enumerate(sentences, 1):
+        log.info("[TTS] rendering #%d/%d...", i, len(sentences))
+        audio = await _synthesize_async(sentence, instruct)
+        yield {"type": "text", "data": sentence, "audio": audio}
 
     log.info("=== DONE topic=%r total=%.2fs ===", topic, time.perf_counter() - t_total)
     yield {"type": "done"}

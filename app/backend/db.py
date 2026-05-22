@@ -1,3 +1,4 @@
+import json
 import aiosqlite
 from app.backend.config import DB_PATH
 
@@ -17,6 +18,12 @@ async def init_db():
                 sequence   INTEGER NOT NULL,
                 text       TEXT NOT NULL,
                 audio      BLOB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS research_cache (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                concept    TEXT UNIQUE NOT NULL,
+                data       TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS story_chapters (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,6 +80,28 @@ async def get_session_audio(session_id: int) -> list[dict]:
             (session_id,),
         )
         return [dict(r) for r in await cur.fetchall()]
+
+
+# ── Research cache ────────────────────────────────────────────────
+
+async def get_cached_research(concept: str) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT data FROM research_cache WHERE concept=?", (concept.lower().strip(),)
+        )
+        row = await cur.fetchone()
+        return json.loads(row["data"]) if row else None
+
+
+async def save_research_cache(concept: str, data: dict):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO research_cache (concept, data) VALUES (?,?)
+               ON CONFLICT(concept) DO UPDATE SET data=excluded.data, created_at=CURRENT_TIMESTAMP""",
+            (concept.lower().strip(), json.dumps(data)),
+        )
+        await db.commit()
 
 
 # ── Story chapter ─────────────────────────────────────────────────

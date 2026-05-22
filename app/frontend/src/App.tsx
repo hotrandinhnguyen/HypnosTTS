@@ -1,15 +1,15 @@
-import React, {
+import {
   useState,
   useEffect,
   useRef,
   useCallback,
 } from 'react'
-import { BookOpen, BookMarked, Play, Square, Search } from 'lucide-react'
+import { Play, Square, Search } from 'lucide-react'
 
 import { useAudio } from './hooks/useAudio'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './components/ui/tabs'
 import { Button } from './components/ui/button'
-import { Sidebar } from './components/Sidebar'
+import { NavSidebar } from './components/NavSidebar'
+import type { Page } from './components/NavSidebar'
 import type { HistoryItem } from './components/Sidebar'
 import { VoicePicker } from './components/VoicePicker'
 import type { Voice } from './components/VoicePicker'
@@ -20,13 +20,26 @@ import { StorySearch } from './components/StorySearch'
 
 type CardDotState = 'idle' | 'playing' | 'done'
 
+const PAGE_META: Record<Page, { title: string; titleAccent: string; subtitle: string }> = {
+  learn: {
+    title: 'Học',
+    titleAccent: 'Tập',
+    subtitle: 'AI tổng hợp bài học · TTS giọng nhất quán',
+  },
+  story: {
+    title: 'Đọc',
+    titleAccent: 'Truyện',
+    subtitle: 'Crawl & phát thanh truyện từ truyenfull.today',
+  },
+}
+
 export default function App() {
   // ── Voices ────────────────────────────────────────────────────
   const [voices, setVoices] = useState<Voice[]>([])
   const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null)
 
-  // ── Tab ───────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'learn' | 'story'>('learn')
+  // ── Page ──────────────────────────────────────────────────────
+  const [activePage, setActivePage] = useState<Page>('learn')
 
   // ── Learn tab ─────────────────────────────────────────────────
   const [topic, setTopic] = useState('')
@@ -82,11 +95,11 @@ export default function App() {
 
   useEffect(() => {
     loadHistory()
-  }, [activeTab])
+  }, [activePage])
 
   async function loadHistory() {
     try {
-      if (activeTab === 'story') {
+      if (activePage === 'story') {
         const rows: HistoryItem[] = await (await fetch('/api/story/history')).json()
         setHistoryItems(rows)
       } else {
@@ -107,7 +120,6 @@ export default function App() {
 
   function appendSentenceSpan(text: string): HTMLElement {
     const el = captionRef.current!
-    // Remove placeholder if present
     const placeholder = el.querySelector('span.italic')
     if (placeholder) placeholder.remove()
     const span = document.createElement('span')
@@ -175,9 +187,6 @@ export default function App() {
       audio.addSessionBuffer(audioBuffer)
       if (span) {
         audio.scheduleBuffer(audioBuffer, span)
-        // Update playedCount when span transitions to done
-        const origOnEnded = (span as { _onEnded?: () => void })._onEnded
-        // We track via MutationObserver on class change
         const obs = new MutationObserver(() => {
           if (span.classList.contains('done')) {
             setPlayedCount(prev => prev + 1)
@@ -291,7 +300,6 @@ export default function App() {
           }
         })
         obs.observe(span, { attributes: true, attributeFilter: ['class'] })
-
         audio.scheduleBuffer(buf, span)
       }
 
@@ -305,17 +313,18 @@ export default function App() {
 
   // ── History select ────────────────────────────────────────────
   function handleHistorySelect(item: HistoryItem) {
-    if (activeTab === 'story' && item.url) {
+    if (activePage === 'story' && item.url) {
       startStorySession(item.url)
-    } else if (activeTab === 'learn' && item.id) {
+    } else if (activePage === 'learn' && item.id) {
       replayLearnSession(item)
     }
   }
 
-  // ── Tab change ────────────────────────────────────────────────
-  function handleTabChange(tab: string) {
-    setActiveTab(tab as 'learn' | 'story')
+  // ── Page navigate ─────────────────────────────────────────────
+  function handleNavigate(page: Page) {
+    if (page === activePage) return
     stopActive()
+    setActivePage(page)
   }
 
   // ── Chapter nav ───────────────────────────────────────────────
@@ -326,118 +335,117 @@ export default function App() {
     if (nextUrlRef.current) startStorySession(nextUrlRef.current)
   }
 
+  const meta = PAGE_META[activePage]
+
   return (
     <>
       {/* Orbs */}
       <div className="orb orb-1" />
       <div className="orb orb-2" />
       <div className="orb orb-3" />
+      <div className="orb orb-4" />
 
       {/* Layout */}
-      <div className="flex h-screen relative z-10">
-        <Sidebar
-          label={activeTab === 'story' ? 'Truyện đã đọc' : 'Lịch sử'}
-          items={historyItems}
-          activeId={activeHistoryId}
-          onSelect={handleHistorySelect}
+      <div className="app-layout">
+        <NavSidebar
+          activePage={activePage}
+          onNavigate={handleNavigate}
+          historyItems={historyItems}
+          activeHistoryId={activeHistoryId}
+          onHistorySelect={handleHistorySelect}
         />
 
-        {/* Main */}
-        <main className="flex-1 min-w-0 flex flex-col px-8 py-6 gap-4 overflow-y-auto">
-          {/* Header */}
-          <header className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-[-0.6px] text-slate-200">
-                Hypnos<span className="bg-gradient-to-br from-violet-500 to-cyan-400 bg-clip-text text-transparent">TTS</span>
-              </h1>
-              <p className="text-[13px] text-[#64748b] mt-0.5">
-                AI học tập · Đọc truyện · Giọng cloned nhất quán
-              </p>
-            </div>
+        {/* Main content — key triggers .page-enter animation on page switch */}
+        <div className="main-content">
+          <div key={activePage} className="page-enter" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
-            <Tabs value={activeTab} onValueChange={handleTabChange}>
-              <TabsList>
-                <TabsTrigger value="learn">
-                  <BookOpen size={13} />
-                  Học
-                </TabsTrigger>
-                <TabsTrigger value="story">
-                  <BookMarked size={13} />
-                  Truyện
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </header>
-
-          {/* Voice picker */}
-          <VoicePicker
-            voices={voices}
-            selectedKey={selectedVoice?.key ?? ''}
-            onSelect={setSelectedVoice}
-          />
-
-          {/* Tab content */}
-          <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsContent value="learn">
-              <div className="flex gap-2.5 items-center">
-                <div className="flex-1 relative flex items-center">
-                  <Search size={16} className="absolute left-4 text-[#64748b] pointer-events-none" />
-                  <input
-                    className="glass-input"
-                    placeholder="Nhập chủ đề muốn học (VD: Deep Learning, Docker, React hooks...)"
-                    value={topic}
-                    onChange={e => setTopic(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !learnActive) startLearnSession() }}
-                    autoComplete="off"
-                  />
-                </div>
-                {!learnActive ? (
-                  <Button onClick={startLearnSession}>
-                    <Play size={13} fill="currentColor" />
-                    Bắt đầu
-                  </Button>
-                ) : (
-                  <Button variant="destructive" onClick={stopActive}>
-                    <Square size={13} fill="currentColor" />
-                    Dừng
-                  </Button>
-                )}
+            {/* Page header */}
+            <header className="page-header">
+              <div className="page-title-group">
+                <h1 className="page-title">
+                  {meta.title}
+                  <span className="page-title-accent"> {meta.titleAccent}</span>
+                </h1>
+                <p className="page-subtitle">{meta.subtitle}</p>
               </div>
-            </TabsContent>
 
-            <TabsContent value="story">
-              <StorySearch
-                isActive={storyActive}
-                onStartSession={startStorySession}
-                onStop={stopActive}
+              {/* Voice picker in header */}
+              <VoicePicker
+                voices={voices}
+                selectedKey={selectedVoice?.key ?? ''}
+                onSelect={setSelectedVoice}
               />
-              <ChapterNav
-                visible={chapterNavVisible}
-                chapterTitle={chapterTitle}
-                prevUrl={prevUrlRef.current}
-                nextUrl={nextUrlRef.current}
-                onPrev={goToPrev}
-                onNext={goToNext}
+            </header>
+
+            {/* Page body */}
+            <div className="page-body">
+
+              {/* Learn page */}
+              {activePage === 'learn' && (
+                <div className="flex gap-2.5 items-center">
+                  <div className="flex-1 relative flex items-center">
+                    <Search size={16} className="absolute left-4 text-[#64748b] pointer-events-none" />
+                    <input
+                      className="glass-input"
+                      placeholder="Nhập chủ đề muốn học (VD: Deep Learning, Docker, React hooks...)"
+                      value={topic}
+                      onChange={e => setTopic(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !learnActive) startLearnSession() }}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {learnActive ? (
+                    <Button variant="destructive" onClick={stopActive}>
+                      <Square size={13} fill="currentColor" />
+                      Dừng
+                    </Button>
+                  ) : (
+                    <Button onClick={startLearnSession}>
+                      <Play size={13} fill="currentColor" />
+                      Bắt đầu
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Story page */}
+              {activePage === 'story' && (
+                <>
+                  <StorySearch
+                    isActive={storyActive}
+                    onStartSession={startStorySession}
+                    onStop={stopActive}
+                  />
+                  <ChapterNav
+                    visible={chapterNavVisible}
+                    chapterTitle={chapterTitle}
+                    prevUrl={prevUrlRef.current}
+                    nextUrl={nextUrlRef.current}
+                    onPrev={goToPrev}
+                    onNext={goToNext}
+                  />
+                </>
+              )}
+
+              {/* Status bar */}
+              <StatusBar message={statusMsg} visible={statusVisible} />
+
+              {/* Player card */}
+              <PlayerCard
+                audio={audio}
+                captionRef={captionRef}
+                controlsVisible={controlsVisible}
+                progressVisible={progressVisible}
+                downloadVisible={downloadVisible}
+                totalSentences={totalSentences}
+                playedCount={playedCount}
+                cardDotState={cardDotState}
+                currentTopic={currentTopic}
               />
-            </TabsContent>
-          </Tabs>
 
-          {/* Status bar */}
-          <StatusBar message={statusMsg} visible={statusVisible} />
-
-          {/* Player card */}
-          <PlayerCard
-            audio={audio}
-            captionRef={captionRef}
-            controlsVisible={controlsVisible}
-            progressVisible={progressVisible}
-            downloadVisible={downloadVisible}
-            totalSentences={totalSentences}
-            playedCount={playedCount}
-            cardDotState={cardDotState}
-            currentTopic={currentTopic}
-          />
-        </main>
+            </div>
+          </div>
+        </div>
       </div>
     </>
   )

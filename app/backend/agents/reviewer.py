@@ -9,8 +9,8 @@ _MARKDOWN_RE = re.compile(r"(?:^|\s)[*#]{1,3}|^\s*[-*]\s|\*\*", re.MULTILINE)
 _NUMBERED_LIST_RE = re.compile(r"^\s*\d+\.\s", re.MULTILINE)
 _LONG_SENTENCE_RE = re.compile(r"[^.!?\n]{160,}")
 
-MIN_WORDS = 200
-MAX_LONG_SENTENCES = 2
+MIN_WORDS = 2000
+MAX_LONG_SENTENCES = 3
 
 
 def _word_count(text: str) -> int:
@@ -72,7 +72,7 @@ def _check_analogy_used(script: str, analogy: dict) -> str | None:
     return None
 
 
-async def reviewer_node(state: GraphState) -> dict:
+def reviewer_node(state: GraphState) -> dict:
     script = state.get("script", "")
     topic = state["topic"]
     analogy = state.get("analogy") or {}

@@ -7,6 +7,7 @@ class ResearchData(BaseModel):
     examples: list[str]
     misconceptions: list[str]
     interesting_angles: list[str]
+    comparisons: list[str]   # "[topic] vs [related]: key difference..."
 
 
 class SearchQueries(BaseModel):

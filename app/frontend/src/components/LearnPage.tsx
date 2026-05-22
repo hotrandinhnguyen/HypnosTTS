@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react'
-import { Search, Play, Square, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Play, Square, ChevronLeft, ChevronRight, Video } from 'lucide-react'
 import { Button } from './ui/button'
 
 interface LearnPageProps {
   isActive: boolean
   onStart: (topic: string) => void
   onStop: () => void
+  onStartVideo: (topic: string) => void
+  isVideoGenerating: boolean
 }
 
 interface Domain {
@@ -97,7 +99,7 @@ const DOMAINS: Domain[] = [
   },
 ]
 
-export function LearnPage({ isActive, onStart, onStop }: Readonly<LearnPageProps>) {
+export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGenerating }: Readonly<LearnPageProps>) {
   const [topic, setTopic]           = useState('')
   const [activeDomain, setActiveDomain] = useState(0)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -105,6 +107,11 @@ export function LearnPage({ isActive, onStart, onStop }: Readonly<LearnPageProps
   function handleStart() {
     const t = topic.trim()
     if (t) onStart(t)
+  }
+
+  function handleStartVideo() {
+    const t = topic.trim()
+    if (t) onStartVideo(t)
   }
 
   function handleChipClick(t: string) {
@@ -130,9 +137,9 @@ export function LearnPage({ isActive, onStart, onStop }: Readonly<LearnPageProps
             placeholder="Nhập chủ đề hoặc chọn gợi ý bên dưới..."
             value={topic}
             onChange={e => setTopic(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !isActive) handleStart() }}
+            onKeyDown={e => { if (e.key === 'Enter' && !isActive && !isVideoGenerating) handleStart() }}
             autoComplete="off"
-            disabled={isActive}
+            disabled={isActive || isVideoGenerating}
           />
         </div>
         {isActive ? (
@@ -141,10 +148,21 @@ export function LearnPage({ isActive, onStart, onStop }: Readonly<LearnPageProps
             Dừng
           </Button>
         ) : (
-          <Button onClick={handleStart} disabled={!topic.trim()}>
-            <Play size={13} fill="currentColor" />
-            Bắt đầu
-          </Button>
+          <>
+            <Button onClick={handleStart} disabled={!topic.trim() || isVideoGenerating}>
+              <Play size={13} fill="currentColor" />
+              Bắt đầu
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleStartVideo}
+              disabled={!topic.trim() || isVideoGenerating}
+              title="Tạo video MP4 kèm ảnh minh họa"
+            >
+              <Video size={13} />
+              {isVideoGenerating ? 'Đang tạo...' : 'Tạo Video'}
+            </Button>
+          </>
         )}
       </div>
 

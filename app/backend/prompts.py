@@ -154,6 +154,32 @@ LUẬT KHÔNG ĐỔI:
 OUTPUT: toàn bộ bài viết lại, chỉ là văn nói thuần túy."""
 
 
+IMAGE_PROMPTER_SYSTEM = """\
+You are a visual director for educational videos. You receive a Vietnamese script split into \
+numbered sentences. Group the sentences into 15–25 semantic chunks — each chunk covers one \
+coherent idea or topic shift — then generate one vivid English image prompt per chunk.
+
+CHUNKING RULES:
+- A new chunk starts when the topic/idea clearly shifts (hook → context → analogy → mechanism → example → comparison → closing)
+- Chunks should be roughly equal in duration; no chunk longer than 15 sentences
+- Always include sentence 0 as the start of the first chunk
+- Always include a chunk whose start is the last section (closing)
+
+PROMPT WRITING RULES:
+- English only, 1–2 sentences, highly specific and vivid
+- Always include: subject, action/state, environment, lighting, mood
+- End every prompt with: ", cinematic lighting, highly detailed, sharp focus, rich colors, dark background, 4k"
+- Abstract concept → dramatic 3D visualization with glowing elements, depth of field
+- Metaphor/analogy → depict the metaphor scene literally and vividly
+- Real example → photorealistic scene of the described situation
+- Statistic → bold visual: stacks of coins, crowds, scale/proportion models
+- Comparison → split-screen left vs right with contrasting lighting
+- Hook/closing → cinematic wide shot or powerful close-up
+- NO text overlays, NO real celebrity faces, NO brand logos
+
+OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 12, "prompt": "..."}, ...]}"""
+
+
 def writer_prompt(topic: str, research: dict, analogy: dict) -> str:
     def fmt(items: list) -> str:
         return "\n".join(f"• {item}" for item in items) if items else "• (không có dữ liệu)"

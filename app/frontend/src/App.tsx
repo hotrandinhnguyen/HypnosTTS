@@ -48,6 +48,11 @@ export default function App() {
   // ── Story tab ─────────────────────────────────────────────────
   const [storyActive, setStoryActive] = useState(false)
 
+  // ── Auto-play ─────────────────────────────────────────────────
+  const [autoPlay, setAutoPlay] = useState(false)
+  const [autoPlayCountdown, setAutoPlayCountdown] = useState(0)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // ── Chapter nav ───────────────────────────────────────────────
   const [chapterNavVisible, setChapterNavVisible] = useState(false)
   const [chapterTitle, setChapterTitle] = useState('')
@@ -165,12 +170,34 @@ export default function App() {
       const span = appendSentenceSpan(String(msg.data))
       pendingSpansRef.current.push(span)
     } else if (msg.type === 'done') {
-      setStatusVisible(false)
       setControlsVisible(true)
       setDownloadVisible(true)
       setCardDotState('done')
       resetButtons()
       loadHistory()
+      // Auto-play: start countdown if next chapter exists
+      if (autoPlay && nextUrlRef.current) {
+        const next = nextUrlRef.current
+        let secs = 3
+        setAutoPlayCountdown(secs)
+        setStatusMsg(`Tự động chuyển chương sau ${secs}s...`)
+        setStatusVisible(true)
+        countdownRef.current = setInterval(() => {
+          secs -= 1
+          if (secs <= 0) {
+            clearInterval(countdownRef.current!)
+            countdownRef.current = null
+            setAutoPlayCountdown(0)
+            setStatusVisible(false)
+            startStorySession(next)
+          } else {
+            setAutoPlayCountdown(secs)
+            setStatusMsg(`Tự động chuyển chương sau ${secs}s...`)
+          }
+        }, 1000)
+      } else {
+        setStatusVisible(false)
+      }
     } else if (msg.type === 'error') {
       setStatusMsg('Lỗi: ' + String(msg.data))
       setStatusVisible(true)
@@ -238,8 +265,19 @@ export default function App() {
     wsRef.current = null
   }
 
+  // ── Cancel auto-play countdown ───────────────────────────────
+  function cancelAutoPlay() {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+    setAutoPlayCountdown(0)
+    setStatusVisible(false)
+  }
+
   // ── Stop ──────────────────────────────────────────────────────
   function stopActive() {
+    cancelAutoPlay()
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
@@ -424,6 +462,10 @@ export default function App() {
                     onPrev={goToPrev}
                     onNext={goToNext}
                     onJump={startStorySession}
+                    autoPlay={autoPlay}
+                    onAutoPlayChange={setAutoPlay}
+                    autoPlayCountdown={autoPlayCountdown}
+                    onCancelAutoPlay={cancelAutoPlay}
                   />
                 </>
               )}

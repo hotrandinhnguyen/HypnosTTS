@@ -228,6 +228,23 @@ async def story_search(q: str = ""):
     return JSONResponse(results)
 
 
+@app.get("/api/story/chapters")
+async def story_chapters(slug: str = "", page: int = 1):
+    if not slug.strip():
+        return JSONResponse({"chapters": [], "total_pages": 0, "current_page": 1})
+    from app.backend.scraper import get_chapter_list
+    loop = asyncio.get_event_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, get_chapter_list, slug.strip(), page),
+            timeout=15,
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        log.warning("Chapter list failed for %r: %s", slug, e)
+        return JSONResponse({"chapters": [], "total_pages": 0, "current_page": page})
+
+
 @app.get("/api/voices")
 async def voices():
     return JSONResponse([

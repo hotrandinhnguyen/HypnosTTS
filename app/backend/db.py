@@ -41,6 +41,13 @@ async def init_db():
                 text       TEXT NOT NULL,
                 audio      BLOB NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS video_sessions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER REFERENCES sessions(id),
+                topic      TEXT NOT NULL,
+                video      BLOB NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         await db.commit()
 
@@ -159,6 +166,45 @@ async def save_sentence(chapter_id: int, sequence: int, text: str, audio: bytes)
             (chapter_id, sequence, text, audio),
         )
         await db.commit()
+
+
+async def get_session_text(session_id: int) -> str:
+    """Concatenate all lesson texts for a session (used as discuss context)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT text FROM lessons WHERE session_id=? ORDER BY sequence",
+            (session_id,),
+        )
+        rows = await cur.fetchall()
+        return " ".join(row[0] for row in rows)
+
+
+async def save_video(session_id: int | None, topic: str, video_bytes: bytes) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT INTO video_sessions (session_id, topic, video) VALUES (?,?,?)",
+            (session_id, topic, video_bytes),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_video(video_id: int) -> bytes | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT video FROM video_sessions WHERE id=?", (video_id,)
+        )
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+
+async def get_video_history() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT id, topic, created_at FROM video_sessions ORDER BY created_at DESC LIMIT 30"
+        )
+        return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_story_history() -> list[dict]:

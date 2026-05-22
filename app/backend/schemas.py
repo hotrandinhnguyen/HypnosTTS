@@ -24,3 +24,11 @@ class ReviewResult(BaseModel):
     passed: bool
     issues: list[str]
     suggestion: str
+
+
+class ChunkPrompt(BaseModel):
+    start: int   # sentence index where this image starts
+    prompt: str  # English image prompt for this semantic chunk
+
+class ChunkPromptList(BaseModel):
+    chunks: list[ChunkPrompt]  # 15-25 semantic chunks

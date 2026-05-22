@@ -10,14 +10,17 @@ from fastapi.staticfiles import StaticFiles
 from app.backend.config import TTS_INSTRUCT, VOICE_PRESETS
 from app.backend.db import (
     init_db,
-    create_session, save_lesson, get_history, get_session_audio,
+    create_session, save_lesson, get_history, get_session_audio, get_session_text,
     get_cached_chapter, save_chapter, save_sentence, get_story_history,
+    save_video, get_video, get_video_history,
 )
 from app.backend.pipeline import run
 from app.backend.story_pipeline import run_story
+from app.backend.video_pipeline import run_video
+from app.backend.discuss_pipeline import run_discuss
 
 log = logging.getLogger("main")
-FRONTEND_DIR = Path(__file__).parents[1] / "frontend"
+FRONTEND_DIR = Path(__file__).parents[1] / "frontend" / "dist"
 
 app = FastAPI()
 
@@ -126,6 +129,50 @@ async def ws_lesson(ws: WebSocket):
             pass
 
 
+# ── Video pipeline ─────────────────────────────────────────────────
+
+async def _process_video(ws: WebSocket, topic: str, instruct: str) -> None:
+    session_id = await create_session(topic)
+    async for event in run_video(topic, instruct):
+        if event["type"] == "status":
+            log.info("VIDEO STATUS: %s", event["data"])
+            await ws.send_text(json.dumps({"type": "status", "data": event["data"]}))
+        elif event["type"] == "video_done":
+            video_bytes: bytes = event["video"]
+            video_id = await save_video(session_id, topic, video_bytes)
+            log.info("VIDEO DONE | id=%d | %d bytes", video_id, len(video_bytes))
+            await ws.send_text(json.dumps({"type": "video_done", "video_id": video_id}))
+        elif event["type"] == "error":
+            await ws.send_text(json.dumps({"type": "error", "data": event["data"]}))
+
+
+@app.websocket("/ws/video")
+async def ws_video(ws: WebSocket):
+    await ws.accept()
+    log.info("WS/video connected from %s", ws.client)
+    try:
+        raw = await ws.receive_text()
+        data = json.loads(raw)
+        topic: str = data.get("topic", "").strip()
+        instruct: str = data.get("instruct", TTS_INSTRUCT).strip() or TTS_INSTRUCT
+
+        if not topic:
+            await ws.send_text(json.dumps({"type": "error", "data": "Topic không được trống."}))
+            return
+
+        log.info("Video session | topic=%r | instruct=%r", topic, instruct)
+        await _run_with_cancel(_process_video(ws, topic, instruct), ws)
+
+    except WebSocketDisconnect:
+        log.info("WS/video disconnected")
+    except Exception as e:
+        log.exception("WS/video error: %s", e)
+        try:
+            await ws.send_text(json.dumps({"type": "error", "data": str(e)}))
+        except Exception:
+            pass
+
+
 # ── Story pipeline ─────────────────────────────────────────────────
 
 async def _process_story(ws: WebSocket, url: str, instruct: str) -> None:
@@ -211,6 +258,48 @@ async def ws_story(ws: WebSocket):
             pass
 
 
+# ── Discuss pipeline ───────────────────────────────────────────────
+
+@app.websocket("/ws/discuss")
+async def ws_discuss(ws: WebSocket):
+    await ws.accept()
+    log.info("WS/discuss connected from %s", ws.client)
+    try:
+        raw = await ws.receive_text()
+        data = json.loads(raw)
+        session_id: int | None = data.get("session_id")
+        question: str = data.get("question", "").strip()
+        history: list   = data.get("history", [])
+        instruct: str   = data.get("instruct", TTS_INSTRUCT).strip() or TTS_INSTRUCT
+
+        if not question or not session_id:
+            await ws.send_text(json.dumps({"type": "error", "data": "Thiếu câu hỏi hoặc session."}))
+            return
+
+        script = await get_session_text(int(session_id))
+        if not script:
+            await ws.send_text(json.dumps({"type": "error", "data": "Không tìm thấy nội dung bài giảng."}))
+            return
+
+        log.info("Discuss | session=%d | question=%r", session_id, question[:60])
+
+        async for event in run_discuss(script, history, question, instruct):
+            if event["type"] == "text":
+                await ws.send_text(json.dumps({"type": "text", "data": event["data"]}))
+                await ws.send_bytes(event["audio"])
+            elif event["type"] in ("done", "error"):
+                await ws.send_text(json.dumps(event))
+
+    except WebSocketDisconnect:
+        log.info("WS/discuss disconnected")
+    except Exception as e:
+        log.exception("WS/discuss error: %s", e)
+        try:
+            await ws.send_text(json.dumps({"type": "error", "data": str(e)}))
+        except Exception:
+            pass
+
+
 # ── REST endpoints ─────────────────────────────────────────────────
 
 @app.get("/api/story/history")
@@ -243,6 +332,23 @@ async def story_chapters(slug: str = "", page: int = 1):
     except Exception as e:
         log.warning("Chapter list failed for %r: %s", slug, e)
         return JSONResponse({"chapters": [], "total_pages": 0, "current_page": page})
+
+
+@app.get("/api/video/{video_id}")
+async def download_video(video_id: int):
+    mp4 = await get_video(video_id)
+    if mp4 is None:
+        return JSONResponse({"error": "Video không tồn tại."}, status_code=404)
+    return Response(
+        content=mp4,
+        media_type="video/mp4",
+        headers={"Content-Disposition": f'attachment; filename="hypnos_{video_id}.mp4"'},
+    )
+
+
+@app.get("/api/video/history")
+async def video_history():
+    return JSONResponse(await get_video_history())
 
 
 @app.get("/api/voices")
@@ -298,4 +404,4 @@ async def index():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")

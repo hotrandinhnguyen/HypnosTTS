@@ -15,6 +15,7 @@ import { StatusBar } from './components/StatusBar'
 import { PlayerCard } from './components/PlayerCard'
 import { LearnPage } from './components/LearnPage'
 import { StoryPage } from './components/StoryPage'
+import { DiscussPanel } from './components/DiscussPanel'
 
 type CardDotState = 'idle' | 'playing' | 'done'
 
@@ -40,8 +41,12 @@ export default function App() {
   const [activePage, setActivePage] = useState<Page>('learn')
 
   // ── Session state ─────────────────────────────────────────────
-  const [learnActive, setLearnActive] = useState(false)
-  const [storyActive, setStoryActive] = useState(false)
+  const [learnActive, setLearnActive]           = useState(false)
+  const [storyActive, setStoryActive]           = useState(false)
+  const [videoActive, setVideoActive]           = useState(false)
+  const [videoId, setVideoId]                   = useState<number | null>(null)
+  const [discussSessionId, setDiscussSessionId] = useState<number | null>(null)
+  const videoWsRef = useRef<WebSocket | null>(null)
 
   // ── Auto-play ─────────────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false)
@@ -164,6 +169,7 @@ export default function App() {
       setControlsVisible(true)
       setDownloadVisible(true)
       setCardDotState('done')
+      if (msg.session_id) setDiscussSessionId(Number(msg.session_id))
       resetButtons()
       loadHistory()
       if (autoPlay && nextUrlRef.current) {
@@ -219,7 +225,7 @@ export default function App() {
     }
   }
 
-  // ── Open WebSocket ────────────────────────────────────────────
+  // ── Open WebSocket (lesson / story) ───────────────────────────
   function openWs(wsPath: string, payload: object) {
     audio.ensureCtx(volumeRef.current)
     resetPlayer()
@@ -270,6 +276,11 @@ export default function App() {
       wsRef.current.close()
       wsRef.current = null
     }
+    if (videoWsRef.current) {
+      videoWsRef.current.close()
+      videoWsRef.current = null
+    }
+    setVideoActive(false)
     audio.stop()
     resetPlayer()
     resetButtons()
@@ -277,11 +288,53 @@ export default function App() {
 
   // ── Learn session ─────────────────────────────────────────────
   function startLearnSession(topic: string) {
+    setDiscussSessionId(null)
+    setVideoId(null)
     setCurrentTopic(topic)
     setStatusMsg('Đang kết nối...')
     setStatusVisible(true)
     setLearnActive(true)
     openWs('/ws/lesson', { topic, instruct: selectedVoice?.instruct || '' })
+  }
+
+  // ── Video session ─────────────────────────────────────────────
+  function startVideoSession(topic: string) {
+    setVideoId(null)
+    setVideoActive(true)
+    setStatusMsg('Đang kết nối...')
+    setStatusVisible(true)
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${proto}//${location.host}/ws/video`)
+    videoWsRef.current = ws
+
+    ws.onopen = () => ws.send(JSON.stringify({ topic, instruct: selectedVoice?.instruct || '' }))
+    ws.onmessage = (evt) => {
+      if (typeof evt.data !== 'string') return
+      const msg = JSON.parse(evt.data)
+      if (msg.type === 'status') {
+        setStatusMsg(msg.data)
+        setStatusVisible(true)
+      } else if (msg.type === 'video_done') {
+        setVideoId(Number(msg.video_id))
+        setVideoActive(false)
+        setStatusVisible(false)
+        loadHistory()
+      } else if (msg.type === 'error') {
+        setStatusMsg('Lỗi video: ' + msg.data)
+        setStatusVisible(true)
+        setVideoActive(false)
+      }
+    }
+    ws.onerror = () => {
+      setStatusMsg('Kết nối video thất bại.')
+      setStatusVisible(true)
+      setVideoActive(false)
+    }
+    ws.onclose = () => {
+      setVideoActive(false)
+      videoWsRef.current = null
+    }
   }
 
   // ── Story session ─────────────────────────────────────────────
@@ -298,6 +351,8 @@ export default function App() {
   async function replayLearnSession(item: HistoryItem) {
     if (!item.id) return
     setActiveHistoryId(item.id)
+    setDiscussSessionId(item.id)
+    setVideoId(null)
     audio.ensureCtx(volumeRef.current)
     resetPlayer()
     try {
@@ -325,6 +380,7 @@ export default function App() {
       setProgressVisible(true)
       setControlsVisible(true)
       setDownloadVisible(true)
+      setCardDotState('done')
     } catch (e) {
       console.error('[Replay]', e)
     }
@@ -351,6 +407,7 @@ export default function App() {
   function goToNext() { if (nextUrlRef.current) startStorySession(nextUrlRef.current) }
 
   const meta = PAGE_META[activePage]
+  const anyActive = learnActive || storyActive || videoActive
 
   return (
     <>
@@ -399,6 +456,8 @@ export default function App() {
                   isActive={learnActive}
                   onStart={startLearnSession}
                   onStop={stopActive}
+                  onStartVideo={startVideoSession}
+                  isVideoGenerating={videoActive}
                 />
               )}
 
@@ -424,6 +483,18 @@ export default function App() {
 
               <StatusBar message={statusMsg} visible={statusVisible} />
 
+              {/* ── Video ready banner ─────────────────────── */}
+              {videoId && !anyActive && (
+                <a
+                  href={`/api/video/${videoId}`}
+                  download={`hypnos_${videoId}.mp4`}
+                  className="video-ready-banner"
+                >
+                  <span>🎬 Video sẵn sàng!</span>
+                  <span className="video-ready-btn">Tải xuống MP4 →</span>
+                </a>
+              )}
+
               <PlayerCard
                 audio={audio}
                 captionRef={captionRef}
@@ -435,6 +506,15 @@ export default function App() {
                 cardDotState={cardDotState}
                 currentTopic={currentTopic}
               />
+
+              {/* ── Discuss panel ──────────────────────────── */}
+              {activePage === 'learn' && (
+                <DiscussPanel
+                  sessionId={discussSessionId}
+                  instruct={selectedVoice?.instruct || ''}
+                  visible={!!discussSessionId && !learnActive}
+                />
+              )}
 
             </div>
           </div>

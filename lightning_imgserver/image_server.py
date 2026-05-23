@@ -45,6 +45,12 @@ NEG_PROMPT = os.getenv(
     "blurry, low quality, distorted, deformed, ugly, bad anatomy, "
     "watermark, text, logo, oversaturated, noisy, pixelated",
 )
+
+I2V_MODEL  = os.getenv("I2V_MODEL",  "stabilityai/stable-video-diffusion-img2vid-xt")
+I2V_STEPS  = int(os.getenv("I2V_STEPS",  "25"))
+I2V_FPS    = int(os.getenv("I2V_FPS",    "7"))
+I2V_WIDTH  = int(os.getenv("I2V_WIDTH",  "1024"))
+I2V_HEIGHT = int(os.getenv("I2V_HEIGHT", "576"))
 REMOTION_PATH = os.getenv(
     "REMOTION_PATH",
     "/teamspace/studios/this_studio/remotion_server",
@@ -56,15 +62,24 @@ SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 app = FastAPI()
 app.mount("/files", StaticFiles(directory=str(SESSIONS_DIR)), name="files")
 
-_pipe = None
-_lock = threading.Lock()
+_pipe     = None
+_lock     = threading.Lock()
+_i2v_pipe = None
+_i2v_lock = threading.Lock()
 
 
 def _load():
-    global _pipe
+    global _pipe, _i2v_pipe
     with _lock:
         if _pipe is not None:
             return _pipe
+        # Unload I2V model nếu đang load
+        with _i2v_lock:
+            if _i2v_pipe is not None:
+                del _i2v_pipe
+                _i2v_pipe = None
+                torch.cuda.empty_cache()
+                log.info("I2V unloaded for SD — VRAM freed")
         log.info("Loading %s …", MODEL)
         pipe = StableDiffusion3Pipeline.from_pretrained(
             MODEL,
@@ -94,6 +109,30 @@ def _infer_and_get_image(prompt: str) -> Image.Image:
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
+def _load_i2v():
+    global _i2v_pipe, _pipe
+    with _i2v_lock:
+        if _i2v_pipe is not None:
+            return _i2v_pipe
+        with _lock:
+            if _pipe is not None:
+                del _pipe
+                _pipe = None
+                torch.cuda.empty_cache()
+                log.info("SD unloaded for I2V — VRAM freed")
+        from diffusers import StableVideoDiffusionPipeline
+        log.info("Loading I2V %s ...", I2V_MODEL)
+        pipe = StableVideoDiffusionPipeline.from_pretrained(
+            I2V_MODEL, torch_dtype=torch.float16, variant="fp16",
+        )
+        pipe.to("cuda")
+        pipe.enable_attention_slicing()
+        pipe.set_progress_bar_config(disable=True)
+        _i2v_pipe = pipe
+        log.info("I2V ready — VRAM: %.1f GB", torch.cuda.memory_allocated() / 1e9)
+    return _i2v_pipe
+
+
 class GenRequest(BaseModel):
     prompt: str
 
@@ -102,6 +141,13 @@ class GenSaveRequest(BaseModel):
     prompt: str
     session_id: str
     img_idx: int
+
+
+class GenClipRequest(BaseModel):
+    session_id: str
+    img_idx: int
+    duration_s: float
+    prompt: str = ""
 
 
 class RenderRequest(BaseModel):
@@ -154,6 +200,44 @@ async def generate_save(req: GenSaveRequest):
     url = f"http://localhost:8001/files/{req.session_id}/img_{req.img_idx:04d}.png"
     log.info("Saved — %s", img_path)
     return {"url": url, "path": str(img_path)}
+
+
+@app.post("/generate_clip")
+async def generate_clip(req: GenClipRequest):
+    img_path = SESSIONS_DIR / req.session_id / f"img_{req.img_idx:04d}.png"
+    if not img_path.exists():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": f"Image not found: {img_path}"}, status_code=404)
+
+    # SVD-XT luôn sinh 25 frames — điều chỉnh fps để khớp duration
+    num_frames = 25
+    output_fps = max(1, round(num_frames / max(req.duration_s, 0.5)))
+
+    def _run():
+        import tempfile
+        from diffusers.utils import export_to_video
+        pil_image = Image.open(str(img_path)).convert("RGB").resize((I2V_WIDTH, I2V_HEIGHT))
+        pipe = _load_i2v()
+        with torch.inference_mode():
+            result = pipe(
+                image=pil_image,
+                num_frames=num_frames,
+                num_inference_steps=I2V_STEPS,
+                decode_chunk_size=8,
+                motion_bucket_id=100,
+            )
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+            tmp_path = f.name
+        export_to_video(result.frames[0], tmp_path, fps=output_fps)
+        clip_bytes = Path(tmp_path).read_bytes()
+        Path(tmp_path).unlink(missing_ok=True)
+        return clip_bytes
+
+    log.info("GenerateClip [%s] clip_%04d dur=%.1fs fps=%d",
+             req.session_id, req.img_idx, req.duration_s, output_fps)
+    clip = await asyncio.get_event_loop().run_in_executor(None, _run)
+    log.info("Clip done — %d bytes", len(clip))
+    return Response(content=clip, media_type="video/mp4")
 
 
 @app.post("/unload")

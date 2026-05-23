@@ -32,6 +32,7 @@ async def writer_node(state: GraphState) -> dict:
             existing_script,
             review.get("issues", []),
             review.get("suggestion", ""),
+            state.get("target_minutes", 0),
         )
     else:
         system = WRITER_SYSTEM

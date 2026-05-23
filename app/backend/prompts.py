@@ -308,7 +308,7 @@ KHÔNG markdown. Đây là bài giảng podcast hoàn chỉnh, chuyên sâu, kh�
 Mỗi phần phải đủ dài và chi tiết — KHÔNG rút ngắn."""
 
 
-def writer_revision_prompt(topic: str, script: str, issues: list[str], suggestion: str) -> str:
+def writer_revision_prompt(topic: str, script: str, issues: list[str], suggestion: str, target_minutes: int = 0) -> str:
     issues_text = "\n".join(f"• {i}" for i in issues)
     return f"""Chủ đề: "{topic}"
 
@@ -323,4 +323,4 @@ GỢI Ý ƯU TIÊN: {suggestion}
 ━━━ YÊU CẦU ━━━
 Viết lại toàn bộ bài. Giữ nguyên những đoạn đã tự nhiên và hấp dẫn. \
 Chỉ sửa đúng những điểm nêu trên. Đảm bảo: không markdown, không nhãn phần, \
-mỗi câu dưới 30 từ, đoạn văn nói liên tục, đủ 2.800–3.500 từ."""
+mỗi câu dưới 30 từ, đoạn văn nói liên tục, {_length_target(target_minutes)}."""

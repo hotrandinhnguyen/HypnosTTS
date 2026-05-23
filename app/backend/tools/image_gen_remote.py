@@ -9,7 +9,8 @@ from app.backend.config import IMAGE_API_URL
 log = logging.getLogger("image_gen_remote")
 
 _TIMEOUT_GEN    = 120   # seconds per image
-_TIMEOUT_RENDER = 3600  # seconds for full Remotion render (10-min video ~20-30min to render)
+_TIMEOUT_CLIP   = 300   # seconds per I2V clip (~60-120s on L4)
+_TIMEOUT_RENDER = 3600  # seconds for full Remotion render
 
 
 async def generate(prompt: str) -> bytes:
@@ -32,6 +33,26 @@ async def generate_save(prompt: str, session_id: str, img_idx: int) -> str:
     url = r.json()["url"]
     log.info("[Remote] saved img_%04d → %s", img_idx, url)
     return url
+
+
+async def generate_clip(
+    session_id: str,
+    img_idx: int,
+    duration_s: float,
+    prompt: str = "",
+) -> bytes:
+    """Generate I2V clip from a saved image on Lightning. Returns MP4 bytes."""
+    payload = {
+        "session_id": session_id,
+        "img_idx": img_idx,
+        "duration_s": duration_s,
+        "prompt": prompt,
+    }
+    async with httpx.AsyncClient(timeout=_TIMEOUT_CLIP) as client:
+        r = await client.post(f"{IMAGE_API_URL}/generate_clip", json=payload)
+        r.raise_for_status()
+    log.info("[Remote] clip_%04d done — %d bytes", img_idx, len(r.content))
+    return r.content
 
 
 async def unload() -> None:

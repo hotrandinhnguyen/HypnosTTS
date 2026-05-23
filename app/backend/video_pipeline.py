@@ -30,6 +30,7 @@ from app.backend.tools.video_assembler import (
     map_image_timings,
     generate_srt,
     assemble_video,
+    assemble_video_from_clips,
 )
 
 log = logging.getLogger("video_pipeline")
@@ -109,7 +110,7 @@ async def _run_image_gen_remote(image_prompts: list[dict], session_id: str) -> N
 
 # ── Main entry ────────────────────────────────────────────────────────────────
 
-async def run_video(topic: str, instruct: str = TTS_INSTRUCT, n_images: int = 0, duration_minutes: int = 0) -> AsyncIterator[dict]:
+async def run_video(topic: str, instruct: str = TTS_INSTRUCT, n_images: int = 0, duration_minutes: int = 0, video_mode: str = "remotion") -> AsyncIterator[dict]:
     """
     Yields:
       {"type": "status",     "data": str}    — progress messages
@@ -152,8 +153,13 @@ async def run_video(topic: str, instruct: str = TTS_INSTRUCT, n_images: int = 0,
     n_img = len(image_prompts)
     log.info("[VideoPipeline] %d image prompts", n_img)
 
-    # ── Phase 3–6: branch on IMAGE_PROVIDER ──────────────────────────────────
-    if IMAGE_PROVIDER == "remote":
+    # ── Phase 3–6: branch on video_mode / IMAGE_PROVIDER ─────────────────────
+    if video_mode == "i2v":
+        async for event in _i2v_render_flow(
+            sentences, image_prompts, n_img, instruct, t0, topic
+        ):
+            yield event
+    elif IMAGE_PROVIDER == "remote":
         async for event in _remote_render_flow(
             sentences, image_prompts, n_img, instruct, t0, topic
         ):
@@ -202,7 +208,7 @@ async def _remote_render_flow(sentences, image_prompts, n_img, instruct, t0, top
         audio_bytes=full_audio,
     )
 
-    log.info("[VideoPipeline] DONE topic=%r total=%.2fs video=%d bytes",
+    log.info("[VideoPipeline/Remote] DONE topic=%r total=%.2fs video=%d bytes",
              topic, time.perf_counter() - t0, len(video_bytes))
     yield {"type": "video_done", "video": video_bytes}
     _delete_session(session_id)
@@ -288,6 +294,51 @@ async def _local_render_flow(sentences, image_prompts, n_img, instruct, t0, topi
         bg_music_path = BG_MUSIC_PATH,
     )
 
-    log.info("[VideoPipeline] DONE topic=%r total=%.2fs video=%d bytes",
+    log.info("[VideoPipeline/Local] DONE topic=%r total=%.2fs video=%d bytes",
+             topic, time.perf_counter() - t0, len(video_bytes))
+    yield {"type": "video_done", "video": video_bytes}
+
+
+async def _i2v_render_flow(sentences, image_prompts, n_img, instruct, t0, topic):
+    """I2V flow: SD images saved to Lightning → Wan I2V clips → ffmpeg assembly."""
+    session_id = uuid.uuid4().hex[:8]
+
+    # Phase 3: TTS (local) + image gen (Lightning) in parallel
+    yield {"type": "status", "data": f"Đang render audio + tạo {n_img} ảnh..."}
+    tts_wavs, _ = await asyncio.gather(
+        _run_tts_all(sentences, instruct),
+        _run_image_gen_remote(image_prompts, session_id),
+    )
+    log.info("[VideoPipeline/I2V] TTS + image gen done in %.2fs", time.perf_counter() - t0)
+
+    # Phase 4: Compute timings
+    sentence_timings = compute_sentence_timings(tts_wavs)
+    image_timings    = map_image_timings(image_prompts, sentence_timings)
+    full_audio       = concat_wavs(tts_wavs)
+    srt_text         = generate_srt(sentences, sentence_timings)
+
+    # Phase 5: Unload SD, generate I2V clips sequentially
+    yield {"type": "status", "data": "Giải phóng VRAM SD, bắt đầu I2V..."}
+    await remote_gen.unload()
+
+    clips: list[bytes] = []
+    for i, (start_t, end_t) in enumerate(image_timings):
+        duration_s = max(end_t - start_t, 1.5)
+        prompt = image_prompts[i].get("prompt", "")
+        yield {"type": "status", "data": f"I2V clip {i + 1}/{n_img} ({duration_s:.1f}s)..."}
+        clip = await remote_gen.generate_clip(session_id, i, duration_s, prompt)
+        clips.append(clip)
+        log.info("[VideoPipeline/I2V] clip %d/%d done", i + 1, n_img)
+
+    # Phase 6: ffmpeg assembly
+    yield {"type": "status", "data": "Đang ghép video (ffmpeg)..."}
+    video_bytes = await assemble_video_from_clips(
+        clip_data     = clips,
+        audio_bytes   = full_audio,
+        srt_text      = srt_text,
+        bg_music_path = BG_MUSIC_PATH,
+    )
+
+    log.info("[VideoPipeline/I2V] DONE topic=%r total=%.2fs video=%d bytes",
              topic, time.perf_counter() - t0, len(video_bytes))
     yield {"type": "video_done", "video": video_bytes}

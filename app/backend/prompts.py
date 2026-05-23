@@ -155,29 +155,31 @@ OUTPUT: toàn bộ bài viết lại, chỉ là văn nói thuần túy."""
 
 
 IMAGE_PROMPTER_SYSTEM = """\
-You are a visual director for educational videos. You receive a Vietnamese script split into \
-numbered sentences. Group the sentences into 15–25 semantic chunks — each chunk covers one \
-coherent idea or topic shift — then generate one vivid English image prompt per chunk.
+You are a visual director for educational videos. You receive a Vietnamese educational script \
+split into numbered sentences. Create 40–55 image prompts — one per visual beat — so the \
+image on screen directly ILLUSTRATES what the narrator is saying at that moment.
 
 CHUNKING RULES:
-- A new chunk starts when the topic/idea clearly shifts (hook → context → analogy → mechanism → example → comparison → closing)
-- Chunks should be roughly equal in duration; no chunk longer than 15 sentences
-- Always include sentence 0 as the start of the first chunk
-- Always include a chunk whose start is the last section (closing)
+- Target: 40–55 chunks total (roughly 1 chunk every 2–4 sentences)
+- Start a new chunk when: a new sub-idea begins, a metaphor/example is introduced, \
+  the scene or emotional tone shifts, or a key term is explained
+- Chunk 0 must start at sentence 0
+- Fine-grained is better than coarse — the viewer should never watch the same image for more than 15s
 
-PROMPT WRITING RULES:
+PROMPT WRITING RULES — the image must ILLUSTRATE the narration, not just relate to the topic:
+- Read the sentences in the chunk carefully: what is the narrator EXPLAINING right now?
+- If a metaphor/analogy is used → depict that metaphor literally and vividly (e.g. "brain as RAM" → a RAM stick morphing into a glowing brain)
+- If a mechanism/process is explained → show that process in action (e.g. "neurons firing" → electric impulses racing between neurons)
+- If a comparison is made → split-screen or side-by-side contrast with clear visual difference
+- If a statistic or scale is mentioned → visualize the scale (coin stacks, crowds, maps with proportions)
+- If an example/story is told → photorealistic scene of that exact situation
+- If abstract/conceptual → dramatic 3D visualization anchored to the specific concept (NOT generic "data particles")
 - English only, 1–2 sentences, highly specific and vivid
 - Always include: subject, action/state, environment, lighting, mood
-- End every prompt with: ", cinematic lighting, highly detailed, sharp focus, rich colors, dark background, 4k"
-- Abstract concept → dramatic 3D visualization with glowing elements, depth of field
-- Metaphor/analogy → depict the metaphor scene literally and vividly
-- Real example → photorealistic scene of the described situation
-- Statistic → bold visual: stacks of coins, crowds, scale/proportion models
-- Comparison → split-screen left vs right with contrasting lighting
-- Hook/closing → cinematic wide shot or powerful close-up
+- End every prompt with: ", cinematic lighting, highly detailed, sharp focus, 4k"
 - NO text overlays, NO real celebrity faces, NO brand logos
 
-OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 12, "prompt": "..."}, ...]}"""
+OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 3, "prompt": "..."}, ...]}"""
 
 
 def writer_prompt(topic: str, research: dict, analogy: dict) -> str:

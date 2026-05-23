@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncIterator
 
 from app.backend.config import (
-    REF_AUDIO_PATH, REF_TEXT_PATH, TTS_NUM_STEPS, TTS_INSTRUCT,
+    REF_AUDIO_PATH, REF_TEXT_PATH, TTS_NUM_STEPS, TTS_INSTRUCT, BG_MUSIC_PATH,
 )
 from app.backend.graph import build_graph
 import app.backend.tts_engine as tts_engine
@@ -162,6 +162,7 @@ async def run_video(topic: str, instruct: str = TTS_INSTRUCT) -> AsyncIterator[d
         image_timings = image_timings,
         audio_bytes   = full_audio,
         srt_text      = srt_text,
+        bg_music_path = BG_MUSIC_PATH,
     )
 
     log.info("[VideoPipeline] DONE topic=%r total=%.2fs video=%d bytes",

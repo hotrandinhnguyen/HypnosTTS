@@ -12,7 +12,7 @@ import threading
 
 import torch
 import uvicorn
-from diffusers import FluxPipeline
+from diffusers import StableDiffusion3Pipeline
 from fastapi import FastAPI
 from fastapi.responses import Response
 from PIL import Image
@@ -25,10 +25,16 @@ logging.basicConfig(
 )
 log = logging.getLogger("image_server")
 
-MODEL  = os.getenv("FLUX_MODEL",  "black-forest-labs/FLUX.1-schnell")
-STEPS  = int(os.getenv("FLUX_STEPS",  "4"))
-WIDTH  = int(os.getenv("FLUX_WIDTH",  "1024"))
-HEIGHT = int(os.getenv("FLUX_HEIGHT", "1024"))
+MODEL    = os.getenv("SD_MODEL",  "stabilityai/stable-diffusion-3.5-medium")
+STEPS    = int(os.getenv("SD_STEPS",  "35"))
+WIDTH    = int(os.getenv("SD_WIDTH",  "1024"))
+HEIGHT   = int(os.getenv("SD_HEIGHT", "1024"))
+CFG      = float(os.getenv("SD_CFG",  "5.0"))
+NEG_PROMPT = os.getenv(
+    "SD_NEG_PROMPT",
+    "blurry, low quality, distorted, deformed, ugly, bad anatomy, "
+    "watermark, text, logo, oversaturated, noisy, pixelated",
+)
 
 app = FastAPI()
 _pipe = None
@@ -41,8 +47,12 @@ def _load():
         if _pipe is not None:
             return _pipe
         log.info("Loading %s …", MODEL)
-        pipe = FluxPipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16)
-        pipe.enable_sequential_cpu_offload()
+        pipe = StableDiffusion3Pipeline.from_pretrained(
+            MODEL,
+            torch_dtype=torch.float16,
+        )
+        pipe = pipe.to("cuda")
+        pipe.enable_attention_slicing()
         pipe.set_progress_bar_config(disable=True)
         _pipe = pipe
         log.info("Model ready — VRAM: %.1f GB",
@@ -69,10 +79,11 @@ async def generate(req: GenRequest):
         with torch.inference_mode():
             result = pipe(
                 prompt=req.prompt,
+                negative_prompt=NEG_PROMPT,
                 num_inference_steps=STEPS,
                 width=WIDTH,
                 height=HEIGHT,
-                guidance_scale=0.0,
+                guidance_scale=CFG,
             )
         img: Image.Image = result.images[0]
         buf = io.BytesIO()
@@ -83,6 +94,19 @@ async def generate(req: GenRequest):
     png = await asyncio.get_event_loop().run_in_executor(None, _infer)
     log.info("Done — %d bytes", len(png))
     return Response(content=png, media_type="image/png")
+
+
+@app.post("/unload")
+async def unload():
+    global _pipe
+    with _lock:
+        if _pipe is not None:
+            del _pipe
+            _pipe = None
+            torch.cuda.empty_cache()
+            log.info("Model unloaded from VRAM")
+    vram = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0
+    return {"status": "unloaded", "vram_gb": round(vram, 1)}
 
 
 @app.get("/health")

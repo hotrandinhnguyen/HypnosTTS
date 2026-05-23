@@ -26,7 +26,7 @@ async def generate_image_prompts(sentences: list[str], topic: str) -> list[dict]
     human = (
         f"Topic: {topic}\n"
         f"Total sentences: {len(sentences)}\n\n"
-        f"Script:\n{numbered[:10000]}"
+        f"Script:\n{numbered}"
     )
 
     log.info("[ImagePrompter] requesting semantic chunks for %d sentences", len(sentences))

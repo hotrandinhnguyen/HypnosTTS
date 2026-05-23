@@ -31,4 +31,4 @@ class ChunkPrompt(BaseModel):
     prompt: str  # English image prompt for this semantic chunk
 
 class ChunkPromptList(BaseModel):
-    chunks: list[ChunkPrompt]  # 15-25 semantic chunks
+    chunks: list[ChunkPrompt]  # 40-55 semantic chunks

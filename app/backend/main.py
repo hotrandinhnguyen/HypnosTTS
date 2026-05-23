@@ -131,9 +131,9 @@ async def ws_lesson(ws: WebSocket):
 
 # ── Video pipeline ─────────────────────────────────────────────────
 
-async def _process_video(ws: WebSocket, topic: str, instruct: str) -> None:
+async def _process_video(ws: WebSocket, topic: str, instruct: str, n_images: int = 0, duration_minutes: int = 0) -> None:
     session_id = await create_session(topic)
-    async for event in run_video(topic, instruct):
+    async for event in run_video(topic, instruct, n_images=n_images, duration_minutes=duration_minutes):
         if event["type"] == "status":
             log.info("VIDEO STATUS: %s", event["data"])
             await ws.send_text(json.dumps({"type": "status", "data": event["data"]}))
@@ -155,13 +155,18 @@ async def ws_video(ws: WebSocket):
         data = json.loads(raw)
         topic: str = data.get("topic", "").strip()
         instruct: str = data.get("instruct", TTS_INSTRUCT).strip() or TTS_INSTRUCT
+        n_images: int        = int(data.get("n_images", 0))
+        duration_minutes: int = int(data.get("duration_minutes", 0))
 
         if not topic:
             await ws.send_text(json.dumps({"type": "error", "data": "Topic không được trống."}))
             return
 
-        log.info("Video session | topic=%r | instruct=%r", topic, instruct)
-        await _run_with_cancel(_process_video(ws, topic, instruct), ws)
+        log.info("Video session | topic=%r | instruct=%r | n_images=%d | duration=%dmin",
+                 topic, instruct, n_images, duration_minutes)
+        await _run_with_cancel(
+            _process_video(ws, topic, instruct, n_images=n_images, duration_minutes=duration_minutes), ws
+        )
 
     except WebSocketDisconnect:
         log.info("WS/video disconnected")

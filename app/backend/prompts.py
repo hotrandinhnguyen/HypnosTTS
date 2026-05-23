@@ -179,15 +179,26 @@ OUTPUT JSON: {"chunks": [{"start": 0, "concept": "...", "metaphor": "...", \
 
 VISUAL_PROMPTER_SYSTEM = """\
 You are a professional image prompt engineer for AI image generation (SD 3.5 Medium). \
-You receive pre-analyzed chunks from an educational video. Write ONE highly detailed \
-English image prompt per chunk so the generated image directly illustrates the narration.
+You receive pre-analyzed chunks from an educational video and the overall TOPIC. \
+Write ONE highly detailed English image prompt per chunk.
+
+TOPIC ANCHORING — most important rule:
+- The main subject must always be visually tied to the TOPIC domain. \
+  If the topic is "Docker" → subjects should be tech visualizations: containers, servers, \
+  terminal screens, infrastructure diagrams, engineers at workstations, deployment pipelines. \
+  If the topic is "Machine Learning" → subjects: neural network diagrams, training graphs, \
+  data flows, researchers, GPU clusters. NEVER drift to generic unrelated scenes.
+- A metaphor in the script is a TEACHING TOOL, not the visual subject. \
+  If the script says "Docker is like a shipping container" — do NOT show a real shipping port. \
+  Instead: show Docker containers/infrastructure with shipping container shapes as a \
+  subtle background element or texture, keeping the tech domain front and center.
 
 PROMPT STRUCTURE — every prompt must include ALL 6 elements in natural prose:
-1. Subject    : specific, concrete object/character/scene (NEVER "glowing particles", \
+1. Subject    : a specific object/scene from the TOPIC domain (NEVER "glowing particles", \
                 "data streams", "abstract shapes" as the main subject)
 2. Action     : what is actively happening or the state of the subject
-3. Environment: specific setting/background (laboratory / forest clearing / dark studio / \
-                ancient library / futuristic city...)
+3. Environment: specific setting tied to the topic (server room / developer workspace / \
+                data center / research lab / futuristic dashboard / urban tech hub...)
 4. Camera     : angle + distance — vary across prompts: \
                 (extreme close-up macro | tight close-up | medium shot | wide establishing | \
                 bird's-eye overhead | low-angle dramatic | dutch angle)
@@ -197,15 +208,15 @@ PROMPT STRUCTURE — every prompt must include ALL 6 elements in natural prose:
 6. Style      : photorealistic | cinematic 3D render | scientific illustration | \
                 documentary photography | dramatic concept art
 
-CONTENT RULES:
-- If metaphor is given → depict that metaphor LITERALLY (e.g. "brain as RAM" → \
-  a translucent RAM stick with neuron-like circuit traces glowing inside it)
-- If visual_core is given → use it as the foundation and enrich with camera/lighting/style
+METAPHOR RULE:
+- If metaphor is given → use it only as a subtle visual motif woven into a topic-relevant scene. \
+  Example: "brain as RAM" → a glowing server rack with translucent circuit traces shaped like \
+  neural pathways, NOT a standalone brain or RAM stick in isolation.
+- If visual_core is given → use it as the foundation, but always ground it in the topic domain.
 - Match the mood field: dramatic=high contrast/dark bg, curious=bright/open, \
   wonder=wide shot/epic scale, calm=soft light/warm tones
 
-DIVERSITY RULES — look at ALL prompts you are writing before finalizing:
-- No two prompts share the same main subject category
+DIVERSITY RULES — look at ALL prompts before finalizing:
 - No two consecutive prompts use the same camera angle
 - No two consecutive prompts use the same lighting scheme
 - Each prompt must be visually distinct enough that a viewer can tell images apart instantly
@@ -216,7 +227,15 @@ NO text overlays, NO real celebrity faces, NO brand logos
 OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 3, "prompt": "..."}, ...]}"""
 
 
-def writer_prompt(topic: str, research: dict, analogy: dict) -> str:
+def _length_target(target_minutes: int) -> str:
+    if target_minutes <= 0:
+        return "2.800–3.500 từ (khoảng 18–23 phút TTS)"
+    words_lo = target_minutes * 130
+    words_hi = target_minutes * 145
+    return f"{words_lo:,}–{words_hi:,} từ (khoảng {target_minutes} phút TTS)".replace(",", ".")
+
+
+def writer_prompt(topic: str, research: dict, analogy: dict, target_minutes: int = 0) -> str:
     def fmt(items: list) -> str:
         return "\n".join(f"• {item}" for item in items) if items else "• (không có dữ liệu)"
 
@@ -284,7 +303,7 @@ ai nói đến — phần này giữ người nghe đến phút cuối và tạo
 Kết (4–5 câu): tổng kết 1–2 điều quan trọng nhất, gợi ý bước tiếp theo cụ thể, \
 kết bằng 1 câu truyền cảm hứng hoặc câu hỏi mở ra hành động.
 
-Tổng: 2.800–3.500 từ (khoảng 18–23 phút TTS). Viết liền mạch, KHÔNG dùng nhãn phần, \
+Tổng: {_length_target(target_minutes)}. Viết liền mạch, KHÔNG dùng nhãn phần, \
 KHÔNG markdown. Đây là bài giảng podcast hoàn chỉnh, chuyên sâu, không phải bản tóm tắt. \
 Mỗi phần phải đủ dài và chi tiết — KHÔNG rút ngắn."""
 

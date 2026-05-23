@@ -6,7 +6,7 @@ interface LearnPageProps {
   isActive: boolean
   onStart: (topic: string) => void
   onStop: () => void
-  onStartVideo: (topic: string) => void
+  onStartVideo: (topic: string, nImages: number, durationMinutes: number) => void
   isVideoGenerating: boolean
 }
 
@@ -100,8 +100,10 @@ const DOMAINS: Domain[] = [
 ]
 
 export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGenerating }: Readonly<LearnPageProps>) {
-  const [topic, setTopic]           = useState('')
+  const [topic, setTopic]              = useState('')
   const [activeDomain, setActiveDomain] = useState(0)
+  const [nImages, setNImages]           = useState(0)
+  const [durationMinutes, setDurationMinutes] = useState(0)
   const tabsRef = useRef<HTMLDivElement>(null)
 
   function handleStart() {
@@ -111,7 +113,7 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
 
   function handleStartVideo() {
     const t = topic.trim()
-    if (t) onStartVideo(t)
+    if (t) onStartVideo(t, nImages, durationMinutes)
   }
 
   function handleChipClick(t: string) {
@@ -153,6 +155,34 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
               <Play size={13} fill="currentColor" />
               Bắt đầu
             </Button>
+            <div className="flex flex-col items-center gap-0.5">
+              <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1 }}>Thời lượng</span>
+              <select
+                value={durationMinutes}
+                onChange={e => setDurationMinutes(Number(e.target.value))}
+                disabled={isVideoGenerating}
+                style={{ width: 80, padding: '4px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontSize: 13 }}
+              >
+                <option value={0}>Auto</option>
+                <option value={5}>5 phút</option>
+                <option value={10}>10 phút</option>
+                <option value={15}>15 phút</option>
+                <option value={20}>20 phút</option>
+              </select>
+            </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1 }}>Số ảnh</span>
+              <input
+                type="number"
+                min={0}
+                max={80}
+                value={nImages || ''}
+                onChange={e => setNImages(Math.max(0, Number.parseInt(e.target.value) || 0))}
+                placeholder="Auto"
+                disabled={isVideoGenerating}
+                style={{ width: 60, textAlign: 'center', padding: '4px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontSize: 13 }}
+              />
+            </div>
             <Button
               variant="outline"
               onClick={handleStartVideo}

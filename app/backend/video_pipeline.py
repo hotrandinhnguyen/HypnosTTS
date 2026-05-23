@@ -132,8 +132,9 @@ async def run_video(topic: str, instruct: str = TTS_INSTRUCT) -> AsyncIterator[d
     log.info("[VideoPipeline] graph done %.2fs — %d sentences", time.perf_counter() - t0, len(sentences))
 
     # ── Phase 2: Image prompt generation ────────────────────────────────────
+    estimated_duration = len(sentences) * 5.5  # ~5.5s/sentence average
     yield {"type": "status", "data": f"Kịch bản {len(sentences)} câu. Đang tạo prompt ảnh..."}
-    image_prompts = await generate_image_prompts(sentences, topic)
+    image_prompts = await generate_image_prompts(sentences, topic, total_duration=estimated_duration)
     n_img = len(image_prompts)
     log.info("[VideoPipeline] %d image prompts", n_img)
 

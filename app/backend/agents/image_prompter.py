@@ -38,6 +38,7 @@ async def generate_image_prompts(
     sentences: list[str],
     topic: str,
     total_duration: float = 0.0,
+    n_images: int = 0,
 ) -> list[dict]:
     """
     Returns list of {sentence_index, prompt} — one per visual chunk (~40-55).
@@ -47,7 +48,12 @@ async def generate_image_prompts(
     n = len(sentences)
 
     # ── Agent 1: ChunkAnalyzer ────────────────────────────────────────────────
-    target = _target_chunks(total_duration) if total_duration > 0 else 45
+    if n_images > 0:
+        target = n_images
+    elif total_duration > 0:
+        target = _target_chunks(total_duration)
+    else:
+        target = 45
     log.info("[ImagePrompter/Analyzer] analyzing %d sentences → target %d chunks", n, target)
     analysis: ChunkAnalysisList = await _llm_analyzer.ainvoke([
         SystemMessage(content=CHUNK_ANALYZER_SYSTEM),
@@ -68,6 +74,12 @@ async def generate_image_prompts(
             mood="curious",
         ))
 
+    # Resample nếu LLM tạo nhiều hơn target
+    if len(chunks) > target:
+        step = len(chunks) / target
+        keep = sorted({0} | {round(i * step) for i in range(1, target)})
+        chunks = [chunks[i] for i in keep if i < len(chunks)]
+
     log.info("[ImagePrompter/Analyzer] %d chunks analyzed", len(chunks))
 
     # ── Agent 2: VisualPrompter ───────────────────────────────────────────────
@@ -77,7 +89,7 @@ async def generate_image_prompts(
         for c in chunks
     )
     human = (
-        f"Topic: {topic}\n"
+        f"TOPIC (anchor all images to this domain): {topic}\n"
         f"Total chunks: {len(chunks)}\n\n"
         f"Analyzed chunks:\n{chunks_text}"
     )

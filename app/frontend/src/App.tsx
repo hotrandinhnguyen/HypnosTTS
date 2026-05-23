@@ -298,7 +298,7 @@ export default function App() {
   }
 
   // ── Video session ─────────────────────────────────────────────
-  function startVideoSession(topic: string) {
+  function startVideoSession(topic: string, nImages: number = 0, durationMinutes: number = 0) {
     setVideoId(null)
     setVideoActive(true)
     setStatusMsg('Đang kết nối...')
@@ -308,7 +308,7 @@ export default function App() {
     const ws = new WebSocket(`${proto}//${location.host}/ws/video`)
     videoWsRef.current = ws
 
-    ws.onopen = () => ws.send(JSON.stringify({ topic, instruct: selectedVoice?.instruct || '' }))
+    ws.onopen = () => ws.send(JSON.stringify({ topic, instruct: selectedVoice?.instruct || '', n_images: nImages, duration_minutes: durationMinutes }))
     ws.onmessage = (evt) => {
       if (typeof evt.data !== 'string') return
       const msg = JSON.parse(evt.data)

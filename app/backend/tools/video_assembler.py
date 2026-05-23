@@ -192,6 +192,95 @@ def _check_ffmpeg() -> str:
     return ffmpeg
 
 
+async def assemble_video_from_clips(
+    clip_data: list[bytes],
+    audio_bytes: bytes,
+    srt_text: str,
+    fps: int = 16,
+    bg_music_path: str = "",
+) -> bytes:
+    """Concat I2V MP4 clips, mux TTS audio, burn subtitles."""
+    ffmpeg = _check_ffmpeg()
+
+    def _run() -> bytes:
+        with tempfile.TemporaryDirectory() as _tmp:
+            tmp = Path(_tmp)
+            n = len(clip_data)
+
+            clip_paths: list[Path] = []
+            for i, clip in enumerate(clip_data):
+                p = tmp / f"clip_{i:04d}.mp4"
+                p.write_bytes(clip)
+                clip_paths.append(p)
+
+            audio_path = tmp / "audio.wav"
+            audio_path.write_bytes(audio_bytes)
+            srt_path = tmp / "subs.srt"
+            srt_path.write_text(srt_text, encoding="utf-8")
+            out_path = tmp / "output.mp4"
+
+            has_music = bool(bg_music_path and Path(bg_music_path).exists())
+            audio_idx = n
+            music_idx = n + 1 if has_music else None
+
+            srt_escaped = srt_path.as_posix().replace(":", "\\:")
+            sub_style = (
+                "FontName=Arial,FontSize=22,Bold=-1,"
+                "PrimaryColour=&H00FFEF80,"
+                "OutlineColour=&H00000000,Outline=2,"
+                "BackColour=&H80000000,BorderStyle=3,"
+                "Shadow=0,MarginV=35,Alignment=2"
+            )
+
+            parts: list[str] = []
+            for i in range(n):
+                parts.append(
+                    f"[{i}:v]scale=832:480:"
+                    f"force_original_aspect_ratio=increase,crop=832:480,setsar=1[v{i}]"
+                )
+            concat_in = "".join(f"[v{i}]" for i in range(n))
+            parts.append(f"{concat_in}concat=n={n}:v=1:a=0[vcat]")
+            parts.append(f"[vcat]fps=25[vfps]")
+            parts.append(f"[vfps]subtitles='{srt_escaped}':force_style='{sub_style}'[vout]")
+
+            if music_idx is not None:
+                parts.append(
+                    f"[{audio_idx}:a]aformat=sample_fmts=fltp:sample_rates=44100:"
+                    f"channel_layouts=stereo[amain];"
+                    f"[{music_idx}:a]volume=0.12,aformat=sample_fmts=fltp:sample_rates=44100:"
+                    f"channel_layouts=stereo[amusic];"
+                    f"[amain][amusic]amix=inputs=2:duration=first[aout]"
+                )
+            else:
+                parts.append(
+                    f"[{audio_idx}:a]aformat=sample_fmts=fltp:sample_rates=44100:"
+                    f"channel_layouts=stereo[aout]"
+                )
+
+            fc = ";".join(parts)
+            cmd = [ffmpeg, "-y"]
+            for cp in clip_paths:
+                cmd += ["-i", str(cp)]
+            cmd += ["-i", str(audio_path)]
+            if has_music:
+                cmd += ["-stream_loop", "-1", "-i", bg_music_path]
+            cmd += ["-filter_complex", fc]
+            cmd += ["-map", "[vout]", "-map", "[aout]"]
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "22"]
+            cmd += ["-c:a", "aac", "-b:a", "192k"]
+            cmd += ["-pix_fmt", "yuv420p", "-shortest", str(out_path)]
+
+            log.info("[VideoAssembler/I2V] start — %d clips %.1fs audio", n, wav_duration(audio_bytes))
+            result = subprocess.run(cmd, capture_output=True, timeout=600)
+            if result.returncode != 0:
+                err = result.stderr.decode("utf-8", errors="replace")[-3000:]
+                raise RuntimeError(f"ffmpeg (clips) failed:\n{err}")
+            log.info("[VideoAssembler/I2V] done — %d bytes", out_path.stat().st_size)
+            return out_path.read_bytes()
+
+    return await asyncio.get_event_loop().run_in_executor(None, _run)
+
+
 async def assemble_video(
     image_data: list[bytes],
     image_timings: list[tuple[float, float]],

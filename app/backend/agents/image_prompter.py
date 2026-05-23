@@ -1,53 +1,100 @@
-"""Generate image prompts per semantic chunk — single API call, 15-25 chunks."""
+"""
+2-agent image prompt pipeline:
+  Agent 1 (ChunkAnalyzer)  — understands Vietnamese content, extracts visual intent
+  Agent 2 (VisualPrompter) — writes detailed, diverse English image prompts
+"""
 import logging
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.backend.config import OPENAI_API_KEY, OPENAI_MODEL
-from app.backend.schemas import ChunkPromptList
-from app.backend.prompts import IMAGE_PROMPTER_SYSTEM
+from app.backend.schemas import ChunkAnalysisList, ChunkPrompt, ChunkPromptList
+from app.backend.prompts import CHUNK_ANALYZER_SYSTEM, VISUAL_PROMPTER_SYSTEM
 
 log = logging.getLogger("image_prompter")
 
-_llm = ChatOpenAI(
-    model=OPENAI_MODEL, temperature=0.4, api_key=OPENAI_API_KEY,
+_llm_analyzer = ChatOpenAI(
+    model=OPENAI_MODEL, temperature=0.3, api_key=OPENAI_API_KEY,
+).with_structured_output(ChunkAnalysisList)
+
+_llm_prompter = ChatOpenAI(
+    model=OPENAI_MODEL, temperature=0.6, api_key=OPENAI_API_KEY,
 ).with_structured_output(ChunkPromptList)
 
-_FALLBACK = "Abstract glowing concept visualization with floating data elements, cinematic lighting, highly detailed, sharp focus, rich colors, dark background, 4k"
+_FALLBACK_PROMPT = (
+    "A single glowing idea crystallizing from darkness into a sharp geometric form, "
+    "tight close-up macro, cold blue studio backlight, cinematic 3D render, "
+    "highly detailed, sharp focus, 4k"
+)
 
 
-async def generate_image_prompts(sentences: list[str], topic: str) -> list[dict]:
+def _target_chunks(total_duration: float) -> int:
+    """1 image per 10s of audio, clamped to [20, 80]."""
+    return max(20, min(80, int(total_duration / 10)))
+
+
+async def generate_image_prompts(
+    sentences: list[str],
+    topic: str,
+    total_duration: float = 0.0,
+) -> list[dict]:
     """
-    Returns list of {sentence_index, prompt} — one per semantic chunk.
-    Compatible with map_image_timings which uses sentence_index as start marker.
+    Returns list of {sentence_index, prompt} — one per visual chunk (~40-55).
+    Uses 2 agents: ChunkAnalyzer → VisualPrompter.
     """
     numbered = "\n".join(f"[{i}] {s}" for i, s in enumerate(sentences))
-    human = (
-        f"Topic: {topic}\n"
-        f"Total sentences: {len(sentences)}\n\n"
-        f"Script:\n{numbered[:10000]}"
-    )
-
-    log.info("[ImagePrompter] requesting semantic chunks for %d sentences", len(sentences))
-    result: ChunkPromptList = await _llm.ainvoke([
-        SystemMessage(content=IMAGE_PROMPTER_SYSTEM),
-        HumanMessage(content=human),
-    ])
-
-    chunks = result.chunks
     n = len(sentences)
 
-    # Validate + sort by start index
+    # ── Agent 1: ChunkAnalyzer ────────────────────────────────────────────────
+    target = _target_chunks(total_duration) if total_duration > 0 else 45
+    log.info("[ImagePrompter/Analyzer] analyzing %d sentences → target %d chunks", n, target)
+    analysis: ChunkAnalysisList = await _llm_analyzer.ainvoke([
+        SystemMessage(content=CHUNK_ANALYZER_SYSTEM),
+        HumanMessage(content=f"Topic: {topic}\nTotal sentences: {n}\nTarget chunks: {target}\n\nScript:\n{numbered}"),
+    ])
+
+    chunks = analysis.chunks
     chunks = [c for c in chunks if 0 <= c.start < n]
     chunks.sort(key=lambda c: c.start)
 
-    # Ensure sentence 0 is always covered
     if not chunks or chunks[0].start != 0:
-        chunks.insert(0, type(chunks[0])(start=0, prompt=_FALLBACK) if chunks else None)
-        if chunks[0] is None:
-            from app.backend.schemas import ChunkPrompt
-            chunks[0] = ChunkPrompt(start=0, prompt=_FALLBACK)
+        from app.backend.schemas import ChunkAnalysis
+        chunks.insert(0, ChunkAnalysis(
+            start=0,
+            concept=topic,
+            metaphor="",
+            visual_core=f"A visual introduction to the concept of {topic}",
+            mood="curious",
+        ))
 
-    log.info("[ImagePrompter] %d chunks generated", len(chunks))
-    return [{"sentence_index": c.start, "prompt": c.prompt} for c in chunks]
+    log.info("[ImagePrompter/Analyzer] %d chunks analyzed", len(chunks))
+
+    # ── Agent 2: VisualPrompter ───────────────────────────────────────────────
+    chunks_text = "\n".join(
+        f"[{c.start}] concept={c.concept!r} | metaphor={c.metaphor!r} | "
+        f"visual_core={c.visual_core!r} | mood={c.mood}"
+        for c in chunks
+    )
+    human = (
+        f"Topic: {topic}\n"
+        f"Total chunks: {len(chunks)}\n\n"
+        f"Analyzed chunks:\n{chunks_text}"
+    )
+
+    log.info("[ImagePrompter/Prompter] generating %d prompts", len(chunks))
+    result: ChunkPromptList = await _llm_prompter.ainvoke([
+        SystemMessage(content=VISUAL_PROMPTER_SYSTEM),
+        HumanMessage(content=human),
+    ])
+
+    prompts = result.chunks
+    prompts = [p for p in prompts if 0 <= p.start < n]
+    prompts.sort(key=lambda p: p.start)
+
+    # Ensure sentence 0 covered
+    if not prompts or prompts[0].start != 0:
+        prompts.insert(0, ChunkPrompt(start=0, prompt=_FALLBACK_PROMPT))
+
+    log.info("[ImagePrompter] done — %d prompts", len(prompts))
+    return [{"sentence_index": p.start, "prompt": p.prompt} for p in prompts]

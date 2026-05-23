@@ -154,30 +154,66 @@ LUẬT KHÔNG ĐỔI:
 OUTPUT: toàn bộ bài viết lại, chỉ là văn nói thuần túy."""
 
 
-IMAGE_PROMPTER_SYSTEM = """\
-You are a visual director for educational videos. You receive a Vietnamese script split into \
-numbered sentences. Group the sentences into 15–25 semantic chunks — each chunk covers one \
-coherent idea or topic shift — then generate one vivid English image prompt per chunk.
+CHUNK_ANALYZER_SYSTEM = """\
+You are a content analyst for educational videos. You receive a Vietnamese educational script \
+split into numbered sentences. Group into 40–55 visual chunks, then analyze each chunk deeply.
 
 CHUNKING RULES:
-- A new chunk starts when the topic/idea clearly shifts (hook → context → analogy → mechanism → example → comparison → closing)
-- Chunks should be roughly equal in duration; no chunk longer than 15 sentences
-- Always include sentence 0 as the start of the first chunk
-- Always include a chunk whose start is the last section (closing)
+- Target 40–55 chunks (1 chunk per 2–4 sentences)
+- Start a new chunk when: a new sub-idea begins, a metaphor/example is introduced, \
+  the scene or emotional tone shifts, or a key term is defined
+- Chunk 0 must start at sentence 0
+- Fine-grained is better — viewer should never watch the same image more than 15s
 
-PROMPT WRITING RULES:
-- English only, 1–2 sentences, highly specific and vivid
-- Always include: subject, action/state, environment, lighting, mood
-- End every prompt with: ", cinematic lighting, highly detailed, sharp focus, rich colors, dark background, 4k"
-- Abstract concept → dramatic 3D visualization with glowing elements, depth of field
-- Metaphor/analogy → depict the metaphor scene literally and vividly
-- Real example → photorealistic scene of the described situation
-- Statistic → bold visual: stacks of coins, crowds, scale/proportion models
-- Comparison → split-screen left vs right with contrasting lighting
-- Hook/closing → cinematic wide shot or powerful close-up
-- NO text overlays, NO real celebrity faces, NO brand logos
+ANALYSIS per chunk (required fields):
+- concept   : the SPECIFIC concept/idea being explained right now (not the topic title)
+- metaphor  : the EXACT analogy, example, or story being used — copy key words from the text; \
+              write "" if none
+- visual_core: if you had to draw ONE image so a viewer instantly understands this chunk, \
+               describe it concretely in 1 sentence (what object, what action, what setting)
+- mood      : emotional tone — pick one: dramatic / curious / wonder / calm / analytical / inspiring
 
-OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 12, "prompt": "..."}, ...]}"""
+OUTPUT JSON: {"chunks": [{"start": 0, "concept": "...", "metaphor": "...", \
+"visual_core": "...", "mood": "..."}, ...]}"""
+
+
+VISUAL_PROMPTER_SYSTEM = """\
+You are a professional image prompt engineer for AI image generation (SD 3.5 Medium). \
+You receive pre-analyzed chunks from an educational video. Write ONE highly detailed \
+English image prompt per chunk so the generated image directly illustrates the narration.
+
+PROMPT STRUCTURE — every prompt must include ALL 6 elements in natural prose:
+1. Subject    : specific, concrete object/character/scene (NEVER "glowing particles", \
+                "data streams", "abstract shapes" as the main subject)
+2. Action     : what is actively happening or the state of the subject
+3. Environment: specific setting/background (laboratory / forest clearing / dark studio / \
+                ancient library / futuristic city...)
+4. Camera     : angle + distance — vary across prompts: \
+                (extreme close-up macro | tight close-up | medium shot | wide establishing | \
+                bird's-eye overhead | low-angle dramatic | dutch angle)
+5. Lighting   : type + color + direction — vary across prompts: \
+                (warm golden backlit | cold blue studio | dramatic single side-light | \
+                soft diffused overcast | neon rim-light | candlelight amber | harsh white top-light)
+6. Style      : photorealistic | cinematic 3D render | scientific illustration | \
+                documentary photography | dramatic concept art
+
+CONTENT RULES:
+- If metaphor is given → depict that metaphor LITERALLY (e.g. "brain as RAM" → \
+  a translucent RAM stick with neuron-like circuit traces glowing inside it)
+- If visual_core is given → use it as the foundation and enrich with camera/lighting/style
+- Match the mood field: dramatic=high contrast/dark bg, curious=bright/open, \
+  wonder=wide shot/epic scale, calm=soft light/warm tones
+
+DIVERSITY RULES — look at ALL prompts you are writing before finalizing:
+- No two prompts share the same main subject category
+- No two consecutive prompts use the same camera angle
+- No two consecutive prompts use the same lighting scheme
+- Each prompt must be visually distinct enough that a viewer can tell images apart instantly
+
+END every prompt with: ", highly detailed, sharp focus, 4k"
+NO text overlays, NO real celebrity faces, NO brand logos
+
+OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 3, "prompt": "..."}, ...]}"""
 
 
 def writer_prompt(topic: str, research: dict, analogy: dict) -> str:

@@ -37,6 +37,8 @@ FLUX_STEPS: int  = int(os.getenv("FLUX_STEPS", "4"))
 FLUX_WIDTH: int  = int(os.getenv("FLUX_WIDTH", "1024"))
 FLUX_HEIGHT: int = int(os.getenv("FLUX_HEIGHT", "1024"))
 
+BG_MUSIC_PATH: str = os.getenv("BG_MUSIC_PATH", "")
+
 VOICE_PRESETS: dict[str, str] = {
     "female_warm":  "female, moderate pitch, middle-aged",
     "female_young": "female, high pitch, young adult",

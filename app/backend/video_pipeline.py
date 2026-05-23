@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncIterator
 
 from app.backend.config import (
-    REF_AUDIO_PATH, REF_TEXT_PATH, TTS_NUM_STEPS, TTS_INSTRUCT,
+    REF_AUDIO_PATH, REF_TEXT_PATH, TTS_NUM_STEPS, TTS_INSTRUCT, BG_MUSIC_PATH,
 )
 from app.backend.graph import build_graph
 import app.backend.tts_engine as tts_engine
@@ -132,8 +132,9 @@ async def run_video(topic: str, instruct: str = TTS_INSTRUCT) -> AsyncIterator[d
     log.info("[VideoPipeline] graph done %.2fs — %d sentences", time.perf_counter() - t0, len(sentences))
 
     # ── Phase 2: Image prompt generation ────────────────────────────────────
+    estimated_duration = len(sentences) * 5.5  # ~5.5s/sentence average
     yield {"type": "status", "data": f"Kịch bản {len(sentences)} câu. Đang tạo prompt ảnh..."}
-    image_prompts = await generate_image_prompts(sentences, topic)
+    image_prompts = await generate_image_prompts(sentences, topic, total_duration=estimated_duration)
     n_img = len(image_prompts)
     log.info("[VideoPipeline] %d image prompts", n_img)
 
@@ -162,6 +163,7 @@ async def run_video(topic: str, instruct: str = TTS_INSTRUCT) -> AsyncIterator[d
         image_timings = image_timings,
         audio_bytes   = full_audio,
         srt_text      = srt_text,
+        bg_music_path = BG_MUSIC_PATH,
     )
 
     log.info("[VideoPipeline] DONE topic=%r total=%.2fs video=%d bytes",

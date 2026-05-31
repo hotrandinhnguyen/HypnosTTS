@@ -1,5 +1,29 @@
-import { useState, useRef } from 'react'
-import { Search, Play, Square, ChevronLeft, ChevronRight, Video } from 'lucide-react'
+import { useRef, useState } from 'react'
+import {
+  Atom,
+  BadgeDollarSign,
+  BarChart3,
+  Binary,
+  Brain,
+  BrainCircuit,
+  BriefcaseBusiness,
+  ChevronLeft,
+  ChevronRight,
+  Cloud,
+  Cog,
+  Database,
+  Globe2,
+  Link2,
+  Play,
+  RadioTower,
+  Search,
+  ShieldCheck,
+  Smartphone,
+  Square,
+  TrendingUp,
+  Video,
+  type LucideIcon,
+} from 'lucide-react'
 import { Button } from './ui/button'
 
 interface LearnPageProps {
@@ -12,97 +36,96 @@ interface LearnPageProps {
 
 interface Domain {
   label: string
-  icon: string
+  icon: LucideIcon
   topics: string[]
 }
 
 const DOMAINS: Domain[] = [
   {
     label: 'AI & ML',
-    icon: '🤖',
+    icon: BrainCircuit,
     topics: ['Machine Learning', 'Deep Learning', 'Neural Networks', 'Transformer', 'RAG', 'Reinforcement Learning', 'Computer Vision', 'NLP'],
   },
   {
     label: 'DevOps',
-    icon: '⚙️',
+    icon: Cog,
     topics: ['Docker', 'Kubernetes', 'CI/CD Pipeline', 'Terraform', 'Ansible', 'Helm', 'GitOps', 'Jenkins'],
   },
   {
     label: 'Web Dev',
-    icon: '🌐',
+    icon: Globe2,
     topics: ['React Hooks', 'TypeScript', 'REST API', 'GraphQL', 'WebSockets', 'Next.js', 'Vite', 'Micro Frontends'],
   },
   {
     label: 'Database',
-    icon: '🗄️',
+    icon: Database,
     topics: ['PostgreSQL', 'Redis', 'MongoDB', 'SQL Indexing', 'ACID', 'Database Sharding', 'ClickHouse', 'Elasticsearch'],
   },
   {
     label: 'Bảo mật',
-    icon: '🔒',
+    icon: ShieldCheck,
     topics: ['JWT', 'OAuth 2.0', 'HTTPS & TLS', 'SQL Injection', 'Zero Trust', 'CORS', 'CSP', 'XSS'],
   },
   {
     label: 'Cloud',
-    icon: '☁️',
+    icon: Cloud,
     topics: ['AWS Lambda', 'Microservices', 'Load Balancing', 'CDN', 'API Gateway', 'Event-Driven Architecture', 'CQRS', 'Service Mesh'],
   },
   {
     label: 'Kinh tế',
-    icon: '💰',
+    icon: BadgeDollarSign,
     topics: ['Lãi suất', 'Lạm phát', 'GDP', 'Cổ phiếu', 'Trái phiếu', 'Forex', 'Phân tích kỹ thuật', 'Quỹ ETF', 'Đòn bẩy tài chính', 'Dòng tiền'],
   },
   {
     label: 'Đầu tư',
-    icon: '📈',
+    icon: TrendingUp,
     topics: ['Giá trị nội tại', 'P/E Ratio', 'Phân tích cơ bản', 'Quản lý rủi ro', 'Danh mục đầu tư', 'Market Cap', 'Short Selling', 'Options'],
   },
   {
     label: 'Data Science',
-    icon: '📊',
+    icon: BarChart3,
     topics: ['Pandas', 'NumPy', 'Data Visualization', 'Thống kê', 'A/B Testing', 'Feature Engineering', 'Data Pipeline', 'Power BI'],
   },
   {
     label: 'Mobile',
-    icon: '📱',
+    icon: Smartphone,
     topics: ['React Native', 'Flutter', 'SwiftUI', 'Jetpack Compose', 'PWA', 'App Store Optimization', 'Push Notification', 'Deep Link'],
   },
   {
     label: 'Blockchain',
-    icon: '🔗',
+    icon: Link2,
     topics: ['Smart Contract', 'DeFi', 'NFT', 'Ethereum', 'Consensus Mechanism', 'Layer 2', 'DAO', 'Tokenomics'],
   },
   {
-    label: 'Mạng & Hệ thống',
-    icon: '📡',
+    label: 'Mạng & hệ thống',
+    icon: RadioTower,
     topics: ['TCP/IP', 'DNS', 'HTTP/2 & HTTP/3', 'WebRTC', 'VPN', 'OSI Model', 'BGP', 'Firewall'],
   },
   {
     label: 'Thuật toán',
-    icon: '📐',
+    icon: Binary,
     topics: ['Big O Notation', 'Dynamic Programming', 'Graph Theory', 'Linear Algebra', 'Xác suất thống kê', 'Đệ quy', 'Binary Search', 'Sorting Algorithms'],
   },
   {
     label: 'Kinh doanh',
-    icon: '🏢',
+    icon: BriefcaseBusiness,
     topics: ['OKR', 'Agile & Scrum', 'Product Management', 'Design Thinking', 'Lean Startup', 'Business Model Canvas', 'Go-to-Market', 'KPI'],
   },
   {
     label: 'Tâm lý học',
-    icon: '🧠',
+    icon: Brain,
     topics: ['Cognitive Bias', 'Tư duy phản biện', 'Dunning-Kruger', 'Tâm lý hành vi', 'Flow State', 'Growth Mindset', 'Hiệu ứng mỏ neo', 'Tâm lý đám đông'],
   },
   {
     label: 'Khoa học',
-    icon: '🔭',
+    icon: Atom,
     topics: ['Cơ học lượng tử', 'Thuyết tương đối', 'CRISPR', 'Biến đổi khí hậu', 'Vũ trụ học', 'Hố đen', 'Năng lượng tái tạo', 'AGI'],
   },
 ]
 
 export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGenerating }: Readonly<LearnPageProps>) {
-  const [topic, setTopic]              = useState('')
+  const [topic, setTopic] = useState('')
   const [activeDomain, setActiveDomain] = useState(0)
-  const [nImages, setNImages]           = useState(0)
   const [durationMinutes, setDurationMinutes] = useState(0)
   const tabsRef = useRef<HTMLDivElement>(null)
 
@@ -113,55 +136,61 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
 
   function handleStartVideo() {
     const t = topic.trim()
-    if (t) onStartVideo(t, nImages, durationMinutes, 'i2v')
-  }
-
-  function handleChipClick(t: string) {
-    setTopic(t)
+    if (t) onStartVideo(t, 0, durationMinutes, 'i2v')
   }
 
   function scrollTabs(dir: 'left' | 'right') {
     if (!tabsRef.current) return
-    tabsRef.current.scrollBy({ left: dir === 'left' ? -160 : 160, behavior: 'smooth' })
+    tabsRef.current.scrollBy({ left: dir === 'left' ? -180 : 180, behavior: 'smooth' })
   }
 
   const domain = DOMAINS[activeDomain]
+  const DomainIcon = domain.icon
+  const canSubmit = !!topic.trim() && !isVideoGenerating
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="learn-workspace">
+      <div className="composer-panel">
+        <div className="topic-command-row">
+          <div className="input-wrapper">
+            <Search size={16} className="input-icon" />
+            <input
+              className="glass-input"
+              placeholder="Nhập chủ đề hoặc chọn một gợi ý bên dưới..."
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !isActive && !isVideoGenerating) handleStart() }}
+              autoComplete="off"
+              disabled={isActive || isVideoGenerating}
+            />
+          </div>
 
-      {/* Search row */}
-      <div className="flex gap-2.5 items-center">
-        <div className="flex-1 relative flex items-center">
-          <Search size={16} className="absolute left-4 text-[#64748b] pointer-events-none" />
-          <input
-            className="glass-input"
-            placeholder="Nhập chủ đề hoặc chọn gợi ý bên dưới..."
-            value={topic}
-            onChange={e => setTopic(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !isActive && !isVideoGenerating) handleStart() }}
-            autoComplete="off"
-            disabled={isActive || isVideoGenerating}
-          />
-        </div>
-        {isActive ? (
-          <Button variant="destructive" onClick={onStop}>
-            <Square size={13} fill="currentColor" />
-            Dừng
-          </Button>
-        ) : (
-          <>
-            <Button onClick={handleStart} disabled={!topic.trim() || isVideoGenerating}>
+          {isActive ? (
+            <Button variant="destructive" onClick={onStop} className="primary-action-btn">
+              <Square size={13} fill="currentColor" />
+              Dừng
+            </Button>
+          ) : (
+            <Button onClick={handleStart} disabled={!canSubmit} className="primary-action-btn">
               <Play size={13} fill="currentColor" />
               Bắt đầu
             </Button>
-            <div className="flex flex-col items-center gap-0.5">
-              <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1 }}>Thời lượng</span>
+          )}
+        </div>
+
+        {!isActive && (
+          <div className="video-command-row">
+            <div className="video-command-copy">
+              <Video size={14} />
+              <span>Tạo video minh họa</span>
+            </div>
+
+            <label className="control-field">
+              <span>Thời lượng</span>
               <select
                 value={durationMinutes}
                 onChange={e => setDurationMinutes(Number(e.target.value))}
                 disabled={isVideoGenerating}
-                style={{ width: 80, padding: '4px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontSize: 13 }}
               >
                 <option value={0}>Auto</option>
                 <option value={1}>1 phút</option>
@@ -172,86 +201,77 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
                 <option value={15}>15 phút</option>
                 <option value={20}>20 phút</option>
               </select>
-            </div>
-            <div className="flex flex-col items-center gap-0.5">
-              <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1 }}>Số ảnh</span>
-              <input
-                type="number"
-                min={0}
-                max={80}
-                value={nImages || ''}
-                onChange={e => setNImages(Math.max(0, Number.parseInt(e.target.value) || 0))}
-                placeholder="Auto"
-                disabled={isVideoGenerating}
-                style={{ width: 60, textAlign: 'center', padding: '4px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontSize: 13 }}
-              />
-            </div>
+            </label>
+
             <Button
               variant="outline"
               onClick={handleStartVideo}
-              disabled={!topic.trim() || isVideoGenerating}
+              disabled={!canSubmit}
               title="Tạo video MP4 kèm ảnh minh họa"
             >
               <Video size={13} />
-              {isVideoGenerating ? 'Đang tạo...' : 'Tạo Video'}
+              {isVideoGenerating ? 'Đang tạo...' : 'Tạo video'}
             </Button>
-          </>
+          </div>
         )}
       </div>
 
-      {/* Domain tabs + chips — hidden while active */}
       {!isActive && (
         <div className="learn-suggestions">
-
-          {/* Domain tab bar */}
           <div className="learn-tab-bar">
             <button
               type="button"
               className="learn-tab-arrow"
               onClick={() => scrollTabs('left')}
-              aria-label="scroll left"
+              aria-label="Cuộn sang trái"
             >
               <ChevronLeft size={14} />
             </button>
 
             <div className="learn-tabs" ref={tabsRef}>
-              {DOMAINS.map((d, i) => (
-                <button
-                  key={d.label}
-                  type="button"
-                  className={`learn-domain-tab ${activeDomain === i ? 'active' : ''}`}
-                  onClick={() => setActiveDomain(i)}
-                >
-                  <span>{d.icon}</span>
-                  <span>{d.label}</span>
-                </button>
-              ))}
+              {DOMAINS.map((d, i) => {
+                const Icon = d.icon
+                return (
+                  <button
+                    key={d.label}
+                    type="button"
+                    className={`learn-domain-tab ${activeDomain === i ? 'active' : ''}`}
+                    onClick={() => setActiveDomain(i)}
+                  >
+                    <Icon size={13} />
+                    <span>{d.label}</span>
+                  </button>
+                )
+              })}
             </div>
 
             <button
               type="button"
               className="learn-tab-arrow"
               onClick={() => scrollTabs('right')}
-              aria-label="scroll right"
+              aria-label="Cuộn sang phải"
             >
               <ChevronRight size={14} />
             </button>
           </div>
 
-          {/* Chips for active domain */}
+          <div className="topic-panel-heading">
+            <DomainIcon size={15} />
+            <span>{domain.label}</span>
+          </div>
+
           <div className="learn-chips-row">
             {domain.topics.map(t => (
               <button
                 key={t}
                 type="button"
                 className={`topic-chip ${topic === t ? 'active' : ''}`}
-                onClick={() => handleChipClick(t)}
+                onClick={() => setTopic(t)}
               >
                 {t}
               </button>
             ))}
           </div>
-
         </div>
       )}
     </div>

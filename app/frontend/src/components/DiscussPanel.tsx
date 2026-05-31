@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { MessageCircle } from 'lucide-react'
 import { Button } from './ui/button'
 
 interface Message {
@@ -13,13 +14,13 @@ interface DiscussPanelProps {
 }
 
 export function DiscussPanel({ sessionId, instruct, visible }: Readonly<DiscussPanelProps>) {
-  const [messages, setMessages]   = useState<Message[]>([])
-  const [input, setInput]         = useState('')
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
   const [responding, setResponding] = useState(false)
 
-  const endRef        = useRef<HTMLDivElement>(null)
-  const audioCtxRef   = useRef<AudioContext | null>(null)
-  const nextTimeRef   = useRef(0)
+  const endRef = useRef<HTMLDivElement>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const nextTimeRef = useRef(0)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -74,8 +75,8 @@ export function DiscussPanel({ sessionId, instruct, visible }: Readonly<DiscussP
       }
     }
 
-    ws.onerror  = () => setResponding(false)
-    ws.onclose  = () => { if (responding) setResponding(false) }
+    ws.onerror = () => setResponding(false)
+    ws.onclose = () => { if (responding) setResponding(false) }
   }
 
   if (!visible || !sessionId) return null
@@ -83,8 +84,11 @@ export function DiscussPanel({ sessionId, instruct, visible }: Readonly<DiscussP
   return (
     <div className="discuss-panel">
       <div className="discuss-header">
-        <span className="discuss-title">💬 Thảo luận</span>
-        <span className="discuss-hint">Hỏi bất kỳ điều gì về bài giảng vừa nghe</span>
+        <div className="discuss-title">
+          <MessageCircle size={14} />
+          Thảo luận
+        </div>
+        <span className="discuss-hint">Hỏi thêm về bài giảng vừa nghe</span>
       </div>
 
       <div className="discuss-messages">
@@ -109,8 +113,7 @@ export function DiscussPanel({ sessionId, instruct, visible }: Readonly<DiscussP
 
       <div className="discuss-input-row">
         <input
-          className="glass-input"
-          style={{ paddingLeft: '16px' }}
+          className="glass-input no-icon"
           placeholder="Hỏi về bài giảng..."
           value={input}
           onChange={e => setInput(e.target.value)}

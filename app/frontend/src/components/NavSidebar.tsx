@@ -1,5 +1,4 @@
-import React from 'react'
-import { Music, BookOpen, BookMarked, Clock } from 'lucide-react'
+import { BookMarked, BookOpen, Clock, Music } from 'lucide-react'
 import { ScrollArea } from './ui/scroll-area'
 import type { HistoryItem } from './Sidebar'
 
@@ -24,21 +23,26 @@ const NAV_ITEMS = [
 ]
 
 export function NavSidebar({
-  activePage, onNavigate, historyItems, activeHistoryId, onHistorySelect,
+  activePage,
+  onNavigate,
+  historyItems,
+  activeHistoryId,
+  onHistorySelect,
 }: NavSidebarProps) {
   return (
     <aside className="nav-sidebar">
-      {/* Brand */}
       <div className="nav-brand">
         <div className="brand-icon-wrap">
           <Music size={16} />
         </div>
-        <span className="brand-text">HypnosTTS</span>
+        <div>
+          <span className="brand-text">HypnosTTS</span>
+          <span className="brand-kicker">Audio study desk</span>
+        </div>
       </div>
 
-      {/* Nav items */}
       <nav className="nav-items">
-        <div className="nav-section-label">Menu</div>
+        <div className="nav-section-label">Không gian</div>
         {NAV_ITEMS.map(({ page, label, icon: Icon }) => (
           <button
             key={page}
@@ -52,24 +56,22 @@ export function NavSidebar({
         ))}
       </nav>
 
-      {/* Divider */}
       <div className="nav-divider" />
 
-      {/* Recent history */}
       <div className="nav-history">
         <div className="nav-section-label">
           <Clock size={11} />
           Gần đây
         </div>
         <ScrollArea className="flex-1">
-          <div className="flex flex-col gap-0.5 pr-1">
+          <div className="flex flex-col gap-1 pr-1">
             {historyItems.length === 0 && (
-              <div className="text-[11px] text-[#2d3a52] px-3 py-2 italic">Chưa có lịch sử</div>
+              <div className="history-empty">Chưa có lịch sử</div>
             )}
             {historyItems.map((item, idx) => {
               const key = item.id ?? item.url ?? idx
               const isActive = activeHistoryId === key
-              const label = item.topic || item.chapter_title || item.story_title || '—'
+              const label = item.topic || item.chapter_title || item.story_title || 'Không có tiêu đề'
               return (
                 <div
                   key={key}
@@ -78,7 +80,7 @@ export function NavSidebar({
                   title={label}
                 >
                   <div className="truncate text-[12px]">{label}</div>
-                  <div className="text-[10px] text-[#2d3a52] mt-0.5">
+                  <div className="history-date">
                     {formatDate(item.created_at)}
                   </div>
                 </div>

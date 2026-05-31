@@ -1,9 +1,9 @@
-import React, { useRef, useState, useCallback } from 'react'
-import { Pause, Play, Volume2, Download } from 'lucide-react'
+import React, { useState } from 'react'
+import { Download, Pause, Play, Volume2 } from 'lucide-react'
 import { Button } from './ui/button'
-import { Slider } from './ui/slider'
 import { Card, CardHeader, CardTitle } from './ui/card'
 import { Separator } from './ui/separator'
+import { Slider } from './ui/slider'
 import { toWav } from '@/hooks/useAudio'
 import type { AudioEngine } from '@/hooks/useAudio'
 
@@ -39,10 +39,10 @@ export function PlayerCard({
 
   const dotColor =
     cardDotState === 'playing'
-      ? '#22d3ee'
+      ? 'var(--info)'
       : cardDotState === 'done'
-      ? '#4ade80'
-      : '#8b5cf6'
+      ? 'var(--success)'
+      : 'var(--accent)'
 
   const pct = totalSentences > 0 ? (playedCount / totalSentences) * 100 : 0
 
@@ -96,9 +96,8 @@ export function PlayerCard({
   }
 
   return (
-    <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {/* Gradient top edge */}
-      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-violet-500 to-cyan-400 to-transparent opacity-60 pointer-events-none" />
+    <Card className="player-card">
+      <div className="card-top-glow" />
 
       <CardHeader>
         <div className="flex items-center gap-2">
@@ -106,7 +105,7 @@ export function PlayerCard({
             className="card-dot"
             style={{
               background: dotColor,
-              boxShadow: `0 0 8px ${dotColor}55`,
+              boxShadow: `0 0 0 4px color-mix(in srgb, ${dotColor} 18%, transparent)`,
             }}
           />
           <CardTitle>Nội dung</CardTitle>
@@ -124,37 +123,40 @@ export function PlayerCard({
         )}
       </CardHeader>
 
-      {/* Caption */}
       <div
         ref={captionRef}
-        className="flex-1 px-7 py-6 overflow-y-auto text-base leading-[2] text-slate-200 scroll-smooth"
+        className="caption"
       >
-        <span className="text-[#2d3a52] italic">Nội dung sẽ xuất hiện ở đây...</span>
+        <span className="caption-placeholder">Nội dung sẽ xuất hiện ở đây...</span>
       </div>
 
-      {/* Progress */}
       {progressVisible && (
-        <div className="flex items-center gap-3.5 px-5 pb-3.5 flex-shrink-0">
-          <div className="flex-1 h-[5px] bg-white/[.06] rounded-[3px] overflow-hidden shadow-[inset_0_1px_3px_rgba(0,0,0,.4)] relative">
-            <div
-              className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 rounded-[3px] transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)] relative overflow-hidden"
-              style={{ width: `${pct}%` }}
-            >
-              <div className="progress-shimmer" />
-            </div>
+        <div className="player-telemetry">
+          <div className="waveform-strip" aria-hidden="true">
+            {Array.from({ length: 28 }).map((_, index) => (
+              <span key={index} style={{ animationDelay: `${index * -0.055}s` }} />
+            ))}
           </div>
-          <span className="text-[11px] font-semibold text-[#64748b] whitespace-nowrap min-w-[56px] text-right font-mono">
-            {playedCount} / {totalSentences}
-          </span>
+          <div className="progress-container">
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${pct}%` }}
+              >
+                <div className="progress-shimmer" />
+              </div>
+            </div>
+            <span className="progress-label">
+              {playedCount} / {totalSentences}
+            </span>
+          </div>
         </div>
       )}
 
-      {/* Controls */}
       {controlsVisible && (
         <>
           <Separator />
-          <div className="flex items-center gap-3.5 px-5 py-3 flex-wrap flex-shrink-0">
-            {/* Pause/Resume */}
+          <div className="controls">
             <Button variant="secondary" size="sm" onClick={handlePause}>
               {isPaused ? <Play size={13} fill="currentColor" /> : <Pause size={13} fill="currentColor" />}
               {isPaused ? 'Tiếp tục' : 'Tạm dừng'}
@@ -162,19 +164,16 @@ export function PlayerCard({
 
             <Separator orientation="vertical" className="h-7" />
 
-            {/* Speed */}
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#2d3a52] whitespace-nowrap">
-                Tốc độ
-              </span>
-              <div className="flex gap-1">
+            <div className="ctrl-group">
+              <span className="ctrl-label">Tốc độ</span>
+              <div className="speed-buttons">
                 {SPEEDS.map(s => (
                   <button
                     key={s}
                     onClick={() => handleSpeed(s)}
                     className={`speed-pill ${speed === s ? 'active' : ''}`}
                   >
-                    {s}×
+                    {s}x
                   </button>
                 ))}
               </div>
@@ -182,12 +181,9 @@ export function PlayerCard({
 
             <Separator orientation="vertical" className="h-7" />
 
-            {/* Volume */}
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#2d3a52] whitespace-nowrap">
-                Âm lượng
-              </span>
-              <div className="flex items-center gap-2 text-[#64748b]">
+            <div className="ctrl-group">
+              <span className="ctrl-label">Âm lượng</span>
+              <div className="volume-row">
                 <Volume2 size={13} />
                 <Slider
                   min={0}

@@ -131,7 +131,7 @@ async def ws_lesson(ws: WebSocket):
 
 # ── Video pipeline ─────────────────────────────────────────────────
 
-async def _process_video(ws: WebSocket, topic: str, instruct: str, n_images: int = 0, duration_minutes: int = 0, video_mode: str = "remotion") -> None:
+async def _process_video(ws: WebSocket, topic: str, instruct: str, n_images: int = 0, duration_minutes: int = 0, video_mode: str = "i2v") -> None:
     session_id = await create_session(topic)
     async for event in run_video(topic, instruct, n_images=n_images, duration_minutes=duration_minutes, video_mode=video_mode):
         if event["type"] == "status":
@@ -157,7 +157,7 @@ async def ws_video(ws: WebSocket):
         instruct: str = data.get("instruct", TTS_INSTRUCT).strip() or TTS_INSTRUCT
         n_images: int        = int(data.get("n_images", 0))
         duration_minutes: int = int(data.get("duration_minutes", 0))
-        video_mode: str       = data.get("video_mode", "remotion")
+        video_mode: str       = data.get("video_mode", "i2v")
 
         if not topic:
             await ws.send_text(json.dumps({"type": "error", "data": "Topic không được trống."}))

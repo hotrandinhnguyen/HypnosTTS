@@ -33,10 +33,17 @@ async def writer_node(state: GraphState) -> dict:
             review.get("issues", []),
             review.get("suggestion", ""),
             state.get("target_minutes", 0),
+            state.get("target_words", 0),
         )
     else:
         system = WRITER_SYSTEM
-        human_text = writer_prompt(topic, research, analogy, state.get("target_minutes", 0))
+        human_text = writer_prompt(
+            topic,
+            research,
+            analogy,
+            state.get("target_minutes", 0),
+            state.get("target_words", 0),
+        )
 
     response = await _llm.ainvoke([
         SystemMessage(content=system),

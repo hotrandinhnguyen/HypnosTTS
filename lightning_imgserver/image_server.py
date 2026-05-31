@@ -17,13 +17,14 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import torch
 import uvicorn
 from diffusers import StableDiffusion3Pipeline
 from fastapi import FastAPI
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel
@@ -49,8 +50,9 @@ NEG_PROMPT = os.getenv(
 I2V_MODEL  = os.getenv("I2V_MODEL",  "stabilityai/stable-video-diffusion-img2vid-xt")
 I2V_STEPS  = int(os.getenv("I2V_STEPS",  "25"))
 I2V_FPS    = int(os.getenv("I2V_FPS",    "7"))
-I2V_WIDTH  = int(os.getenv("I2V_WIDTH",  "1024"))
-I2V_HEIGHT = int(os.getenv("I2V_HEIGHT", "576"))
+I2V_FRAMES = int(os.getenv("I2V_FRAMES", "49"))
+I2V_WIDTH  = int(os.getenv("I2V_WIDTH",  "768"))
+I2V_HEIGHT = int(os.getenv("I2V_HEIGHT", "432"))
 REMOTION_PATH = os.getenv(
     "REMOTION_PATH",
     "/teamspace/studios/this_studio/remotion_server",
@@ -66,6 +68,14 @@ _pipe     = None
 _lock     = threading.Lock()
 _i2v_pipe = None
 _i2v_lock = threading.Lock()
+
+
+def _vram_gb() -> float:
+    return round(torch.cuda.memory_allocated() / 1e9, 2) if torch.cuda.is_available() else 0.0
+
+
+def _vram_peak_gb() -> float:
+    return round(torch.cuda.max_memory_allocated() / 1e9, 2) if torch.cuda.is_available() else 0.0
 
 
 def _load():
@@ -89,7 +99,7 @@ def _load():
         pipe.enable_attention_slicing()
         pipe.set_progress_bar_config(disable=True)
         _pipe = pipe
-        log.info("Model ready — VRAM: %.1f GB", torch.cuda.memory_allocated() / 1e9)
+        log.info("Model ready — vram=%.2fGB peak=%.2fGB", _vram_gb(), _vram_peak_gb())
     return _pipe
 
 
@@ -129,7 +139,7 @@ def _load_i2v():
         pipe.enable_attention_slicing()
         pipe.set_progress_bar_config(disable=True)
         _i2v_pipe = pipe
-        log.info("I2V ready — VRAM: %.1f GB", torch.cuda.memory_allocated() / 1e9)
+        log.info("I2V ready — vram=%.2fGB peak=%.2fGB", _vram_gb(), _vram_peak_gb())
     return _i2v_pipe
 
 
@@ -173,20 +183,22 @@ async def startup():
 
 @app.post("/generate")
 async def generate(req: GenRequest):
+    t0 = time.perf_counter()
     def _run():
         img = _infer_and_get_image(req.prompt)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    log.info("Generating — %s", req.prompt[:80])
+    log.info("[Image] start prompt=%s steps=%d size=%dx%d vram=%.2fGB", req.prompt[:80], STEPS, WIDTH, HEIGHT, _vram_gb())
     png = await asyncio.get_event_loop().run_in_executor(None, _run)
-    log.info("Done — %d bytes", len(png))
+    log.info("[Image] done sec=%.2f bytes=%d vram=%.2fGB peak=%.2fGB", time.perf_counter() - t0, len(png), _vram_gb(), _vram_peak_gb())
     return Response(content=png, media_type="image/png")
 
 
 @app.post("/generate_save")
 async def generate_save(req: GenSaveRequest):
+    t0 = time.perf_counter()
     session_dir = SESSIONS_DIR / req.session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     img_path = session_dir / f"img_{req.img_idx:04d}.png"
@@ -195,34 +207,47 @@ async def generate_save(req: GenSaveRequest):
         img = _infer_and_get_image(req.prompt)
         img.save(str(img_path))
 
-    log.info("GenerateSave [%s] img_%04d — %s", req.session_id, req.img_idx, req.prompt[:80])
+    log.info(
+        "[ImageSave] start session=%s img=%04d steps=%d size=%dx%d vram=%.2fGB prompt=%s",
+        req.session_id, req.img_idx, STEPS, WIDTH, HEIGHT, _vram_gb(), req.prompt[:80],
+    )
     await asyncio.get_event_loop().run_in_executor(None, _run)
     url = f"http://localhost:8001/files/{req.session_id}/img_{req.img_idx:04d}.png"
-    log.info("Saved — %s", img_path)
+    log.info(
+        "[ImageSave] done session=%s img=%04d sec=%.2f path=%s vram=%.2fGB peak=%.2fGB",
+        req.session_id, req.img_idx, time.perf_counter() - t0, img_path, _vram_gb(), _vram_peak_gb(),
+    )
     return {"url": url, "path": str(img_path)}
 
 
 @app.post("/generate_clip")
 async def generate_clip(req: GenClipRequest):
+    t0 = time.perf_counter()
     img_path = SESSIONS_DIR / req.session_id / f"img_{req.img_idx:04d}.png"
     if not img_path.exists():
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": f"Image not found: {img_path}"}, status_code=404)
 
-    # SVD-XT luôn sinh 25 frames — điều chỉnh fps để khớp duration
-    num_frames = 25
-    output_fps = max(1, round(num_frames / max(req.duration_s, 0.5)))
+    attempts = [
+        (I2V_FRAMES, I2V_WIDTH, I2V_HEIGHT, I2V_STEPS),
+        (min(I2V_FRAMES, 33), min(I2V_WIDTH, 768), min(I2V_HEIGHT, 432), I2V_STEPS),
+        (25, min(I2V_WIDTH, 768), min(I2V_HEIGHT, 432), max(12, min(I2V_STEPS, 18))),
+    ]
 
-    def _run():
+    def _run(num_frames: int, width: int, height: int, steps: int):
         import tempfile
         from diffusers.utils import export_to_video
-        pil_image = Image.open(str(img_path)).convert("RGB").resize((I2V_WIDTH, I2V_HEIGHT))
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+        output_fps = max(1, round(num_frames / max(req.duration_s, 0.5)))
+        pil_image = Image.open(str(img_path)).convert("RGB").resize((width, height))
         pipe = _load_i2v()
         with torch.inference_mode():
             result = pipe(
                 image=pil_image,
                 num_frames=num_frames,
-                num_inference_steps=I2V_STEPS,
+                num_inference_steps=steps,
                 decode_chunk_size=8,
                 motion_bucket_id=100,
             )
@@ -231,17 +256,71 @@ async def generate_clip(req: GenClipRequest):
         export_to_video(result.frames[0], tmp_path, fps=output_fps)
         clip_bytes = Path(tmp_path).read_bytes()
         Path(tmp_path).unlink(missing_ok=True)
-        return clip_bytes
+        del result
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return clip_bytes, output_fps
 
-    log.info("GenerateClip [%s] clip_%04d dur=%.1fs fps=%d",
-             req.session_id, req.img_idx, req.duration_s, output_fps)
-    clip = await asyncio.get_event_loop().run_in_executor(None, _run)
-    log.info("Clip done — %d bytes", len(clip))
+    last_exc: Exception | None = None
+    clip = None
+    used = None
+    for attempt_idx, (num_frames, width, height, steps) in enumerate(attempts, 1):
+        output_fps = max(1, round(num_frames / max(req.duration_s, 0.5)))
+        log.info(
+            "[I2V] start session=%s clip=%04d attempt=%d/%d dur=%.2fs frames=%d fps=%d steps=%d size=%dx%d vram=%.2fGB prompt=%s",
+            req.session_id, req.img_idx, attempt_idx, len(attempts), req.duration_s,
+            num_frames, output_fps, steps, width, height, _vram_gb(), req.prompt[:80],
+        )
+        try:
+            clip, actual_fps = await asyncio.get_event_loop().run_in_executor(None, _run, num_frames, width, height, steps)
+            used = (attempt_idx, num_frames, width, height, steps, actual_fps)
+            break
+        except torch.OutOfMemoryError as exc:
+            last_exc = exc
+            log.exception(
+                "[I2V] OOM session=%s clip=%04d attempt=%d sec=%.2f vram=%.2fGB peak=%.2fGB",
+                req.session_id, req.img_idx, attempt_idx, time.perf_counter() - t0,
+                _vram_gb(), _vram_peak_gb(),
+            )
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception as exc:
+            last_exc = exc
+            log.exception(
+                "[I2V] failed session=%s clip=%04d attempt=%d sec=%.2f vram=%.2fGB peak=%.2fGB",
+                req.session_id, req.img_idx, attempt_idx, time.perf_counter() - t0,
+                _vram_gb(), _vram_peak_gb(),
+            )
+            break
+
+    if clip is None or used is None:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        exc = last_exc or RuntimeError("I2V generation failed")
+        return JSONResponse(
+            {
+                "error": type(exc).__name__,
+                "detail": str(exc),
+                "session_id": req.session_id,
+                "img_idx": req.img_idx,
+                "vram_gb": _vram_gb(),
+                "vram_peak_gb": _vram_peak_gb(),
+            },
+            status_code=500,
+        )
+
+    attempt_idx, num_frames, width, height, steps, output_fps = used
+    log.info(
+        "[I2V] done session=%s clip=%04d attempt=%d sec=%.2f bytes=%d frames=%d fps=%d steps=%d size=%dx%d vram=%.2fGB peak=%.2fGB",
+        req.session_id, req.img_idx, attempt_idx, time.perf_counter() - t0,
+        len(clip), num_frames, output_fps, steps, width, height, _vram_gb(), _vram_peak_gb(),
+    )
     return Response(content=clip, media_type="video/mp4")
 
 
 @app.post("/unload")
 async def unload():
+    t0 = time.perf_counter()
     global _pipe
     with _lock:
         if _pipe is not None:
@@ -249,12 +328,14 @@ async def unload():
             _pipe = None
             torch.cuda.empty_cache()
             log.info("Model unloaded from VRAM")
-    vram = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0
-    return {"status": "unloaded", "vram_gb": round(vram, 1)}
+    vram = _vram_gb()
+    log.info("[Unload] done sec=%.2f vram=%.2fGB peak=%.2fGB", time.perf_counter() - t0, vram, _vram_peak_gb())
+    return {"status": "unloaded", "vram_gb": vram}
 
 
 @app.post("/render")
 async def render(req: RenderRequest):
+    t0 = time.perf_counter()
     session_dir = SESSIONS_DIR / req.session_id
     session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -285,8 +366,10 @@ async def render(req: RenderRequest):
     }
 
     def _do_render():
-        log.info("[Render] Starting Remotion — session=%s n_images=%d dur=%.1fs",
-                 req.session_id, req.n_images, total_dur)
+        log.info(
+            "[Render] start session=%s n_images=%d dur=%.1fs frames=%d fps=%d size=%dx%d",
+            req.session_id, req.n_images, total_dur, duration_in_frames, req.fps, req.width, req.height,
+        )
         result = subprocess.run(
             ["node", f"{REMOTION_PATH}/render.mjs", json.dumps(render_args)],
             capture_output=True,
@@ -298,7 +381,7 @@ async def render(req: RenderRequest):
             raise RuntimeError(f"Remotion render failed:\n{err}")
         mp4 = output_path.read_bytes()
         shutil.rmtree(str(session_dir), ignore_errors=True)
-        log.info("[Render] done — %d bytes", len(mp4))
+        log.info("[Render] done sec=%.2f bytes=%d", time.perf_counter() - t0, len(mp4))
         return mp4
 
     mp4 = await asyncio.get_event_loop().run_in_executor(None, _do_render)
@@ -307,8 +390,16 @@ async def render(req: RenderRequest):
 
 @app.get("/health")
 async def health():
-    vram = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0
-    return {"status": "ok", "model": MODEL, "steps": STEPS, "vram_gb": round(vram, 1)}
+    return {
+        "status": "ok",
+        "model": MODEL,
+        "steps": STEPS,
+        "i2v_steps": I2V_STEPS,
+        "i2v_frames": I2V_FRAMES,
+        "i2v_size": f"{I2V_WIDTH}x{I2V_HEIGHT}",
+        "vram_gb": _vram_gb(),
+        "vram_peak_gb": _vram_peak_gb(),
+    }
 
 
 if __name__ == "__main__":

@@ -104,7 +104,6 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
   const [activeDomain, setActiveDomain] = useState(0)
   const [nImages, setNImages]           = useState(0)
   const [durationMinutes, setDurationMinutes] = useState(0)
-  const [videoMode, setVideoMode]       = useState<'remotion' | 'i2v'>('remotion')
   const tabsRef = useRef<HTMLDivElement>(null)
 
   function handleStart() {
@@ -114,7 +113,7 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
 
   function handleStartVideo() {
     const t = topic.trim()
-    if (t) onStartVideo(t, nImages, durationMinutes, videoMode)
+    if (t) onStartVideo(t, nImages, durationMinutes, 'i2v')
   }
 
   function handleChipClick(t: string) {
@@ -186,33 +185,6 @@ export function LearnPage({ isActive, onStart, onStop, onStartVideo, isVideoGene
                 disabled={isVideoGenerating}
                 style={{ width: 60, textAlign: 'center', padding: '4px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: 'inherit', fontSize: 13 }}
               />
-            </div>
-            <div className="flex flex-col items-center gap-0.5">
-              <span style={{ fontSize: 10, color: '#94a3b8', lineHeight: 1 }}>Chế độ</span>
-              <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)' }}>
-                <button
-                  type="button"
-                  onClick={() => setVideoMode('remotion')}
-                  disabled={isVideoGenerating}
-                  style={{
-                    padding: '4px 8px', fontSize: 12, cursor: 'pointer',
-                    background: videoMode === 'remotion' ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.07)',
-                    color: 'inherit', border: 'none',
-                  }}
-                  title="Nhanh — Ken Burns + crossfade"
-                >⚡ Nhanh</button>
-                <button
-                  type="button"
-                  onClick={() => setVideoMode('i2v')}
-                  disabled={isVideoGenerating}
-                  style={{
-                    padding: '4px 8px', fontSize: 12, cursor: 'pointer',
-                    background: videoMode === 'i2v' ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.07)',
-                    color: 'inherit', border: 'none',
-                  }}
-                  title="Chất lượng — AI sinh video từ ảnh (~30-60 phút)"
-                >🎬 I2V</button>
-              </div>
             </div>
             <Button
               variant="outline"

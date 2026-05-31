@@ -71,6 +71,8 @@ async def run(topic: str, instruct: str = TTS_INSTRUCT) -> AsyncIterator[dict]:
     initial_state = {
         "topic": topic,
         "instruct": instruct,
+        "target_minutes": 0,
+        "target_words": 0,
         "research": None,
         "analogy": None,
         "script": None,

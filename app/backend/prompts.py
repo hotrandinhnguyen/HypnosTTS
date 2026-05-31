@@ -156,14 +156,16 @@ OUTPUT: toàn bộ bài viết lại, chỉ là văn nói thuần túy."""
 
 CHUNK_ANALYZER_SYSTEM = """\
 You are a content analyst for educational videos. You receive a Vietnamese educational script \
-split into numbered sentences. Group into 40–55 visual chunks, then analyze each chunk deeply.
+split into numbered sentences. Group it into the exact Target chunks requested by the user, \
+then analyze each chunk deeply.
 
 CHUNKING RULES:
-- Target 40–55 chunks (1 chunk per 2–4 sentences)
+- Use the requested Target chunks as the main constraint. Fewer chunks means each visual stays \
+  on screen longer; more chunks means faster visual pacing.
 - Start a new chunk when: a new sub-idea begins, a metaphor/example is introduced, \
   the scene or emotional tone shifts, or a key term is defined
 - Chunk 0 must start at sentence 0
-- Fine-grained is better — viewer should never watch the same image more than 15s
+- Keep chunks evenly distributed across the whole script unless a major idea shift requires otherwise.
 
 ANALYSIS per chunk (required fields):
 - concept   : the SPECIFIC concept/idea being explained right now (not the topic title)
@@ -227,15 +229,40 @@ NO text overlays, NO real celebrity faces, NO brand logos
 OUTPUT JSON: {"chunks": [{"start": 0, "prompt": "..."}, {"start": 3, "prompt": "..."}, ...]}"""
 
 
-def _length_target(target_minutes: int) -> str:
+def _length_target(target_minutes: int, target_words: int = 0) -> str:
     if target_minutes <= 0:
         return "2.800–3.500 từ (khoảng 18–23 phút TTS)"
-    words_lo = target_minutes * 130
-    words_hi = target_minutes * 145
+    if target_words > 0:
+        words_lo = max(80, round(target_words * 0.9))
+        words_hi = round(target_words * 1.1)
+    else:
+        words_lo = target_minutes * 130
+        words_hi = target_minutes * 145
     return f"{words_lo:,}–{words_hi:,} từ (khoảng {target_minutes} phút TTS)".replace(",", ".")
 
 
-def writer_prompt(topic: str, research: dict, analogy: dict, target_minutes: int = 0) -> str:
+def _duration_rule(target_minutes: int, target_words: int = 0) -> str:
+    if target_minutes <= 0:
+        return (
+            "Các số câu trong cấu trúc là mục tiêu cho bài dài. "
+            "Mỗi phần phải đủ dày và chi tiết — KHÔNG rút ngắn."
+        )
+    target = _length_target(target_minutes, target_words)
+    return (
+        f"Mục tiêu thời lượng là {target}. Quy tắc này GHI ĐÈ các số câu gợi ý trong cấu trúc. "
+        "Nếu mục tiêu ngắn, hãy gộp phần, tóm tắt ví dụ, bỏ chi tiết phụ và giữ mạch giải thích rõ. "
+        "Nếu mục tiêu dài, hãy mở rộng bằng cơ chế, ví dụ và so sánh. "
+        "Không viết vượt quá ngân sách từ chỉ để đủ mọi tiểu mục."
+    )
+
+
+def writer_prompt(
+    topic: str,
+    research: dict,
+    analogy: dict,
+    target_minutes: int = 0,
+    target_words: int = 0,
+) -> str:
     def fmt(items: list) -> str:
         return "\n".join(f"• {item}" for item in items) if items else "• (không có dữ liệu)"
 
@@ -303,12 +330,20 @@ ai nói đến — phần này giữ người nghe đến phút cuối và tạo
 Kết (4–5 câu): tổng kết 1–2 điều quan trọng nhất, gợi ý bước tiếp theo cụ thể, \
 kết bằng 1 câu truyền cảm hứng hoặc câu hỏi mở ra hành động.
 
-Tổng: {_length_target(target_minutes)}. Viết liền mạch, KHÔNG dùng nhãn phần, \
+Tổng: {_length_target(target_minutes, target_words)}. {_duration_rule(target_minutes, target_words)} \
+Viết liền mạch, KHÔNG dùng nhãn phần, \
 KHÔNG markdown. Đây là bài giảng podcast hoàn chỉnh, chuyên sâu, không phải bản tóm tắt. \
-Mỗi phần phải đủ dài và chi tiết — KHÔNG rút ngắn."""
+Ưu tiên đúng thời lượng hơn là giữ nguyên số câu gợi ý ở từng phần."""
 
 
-def writer_revision_prompt(topic: str, script: str, issues: list[str], suggestion: str, target_minutes: int = 0) -> str:
+def writer_revision_prompt(
+    topic: str,
+    script: str,
+    issues: list[str],
+    suggestion: str,
+    target_minutes: int = 0,
+    target_words: int = 0,
+) -> str:
     issues_text = "\n".join(f"• {i}" for i in issues)
     return f"""Chủ đề: "{topic}"
 
@@ -323,4 +358,5 @@ GỢI Ý ƯU TIÊN: {suggestion}
 ━━━ YÊU CẦU ━━━
 Viết lại toàn bộ bài. Giữ nguyên những đoạn đã tự nhiên và hấp dẫn. \
 Chỉ sửa đúng những điểm nêu trên. Đảm bảo: không markdown, không nhãn phần, \
-mỗi câu dưới 30 từ, đoạn văn nói liên tục, {_length_target(target_minutes)}."""
+mỗi câu dưới 30 từ, đoạn văn nói liên tục, {_length_target(target_minutes, target_words)}. \
+{_duration_rule(target_minutes, target_words)}"""

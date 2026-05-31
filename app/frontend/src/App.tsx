@@ -1,69 +1,63 @@
 import {
-  useState,
+  useCallback,
   useEffect,
   useRef,
-  useCallback,
+  useState,
 } from 'react'
 
-import { useAudio } from './hooks/useAudio'
+import { DiscussPanel } from './components/DiscussPanel'
+import { LearnPage } from './components/LearnPage'
 import { NavSidebar } from './components/NavSidebar'
 import type { Page } from './components/NavSidebar'
+import { PlayerCard } from './components/PlayerCard'
 import type { HistoryItem } from './components/Sidebar'
+import { StatusBar } from './components/StatusBar'
+import { StudioScene } from './components/StudioScene'
+import { StoryPage } from './components/StoryPage'
 import { VoicePicker } from './components/VoicePicker'
 import type { Voice } from './components/VoicePicker'
-import { StatusBar } from './components/StatusBar'
-import { PlayerCard } from './components/PlayerCard'
-import { LearnPage } from './components/LearnPage'
-import { StoryPage } from './components/StoryPage'
-import { DiscussPanel } from './components/DiscussPanel'
+import { useAudio } from './hooks/useAudio'
 
 type CardDotState = 'idle' | 'playing' | 'done'
 
 const PAGE_META: Record<Page, { title: string; titleAccent: string; subtitle: string }> = {
   learn: {
     title: 'Học',
-    titleAccent: 'Tập',
-    subtitle: 'AI nghiên cứu · tổng hợp analogy · TTS giọng nhất quán',
+    titleAccent: 'tập',
+    subtitle: 'Nghiên cứu, viết lại dễ hiểu và phát thành giọng đọc liền mạch.',
   },
   story: {
     title: 'Đọc',
-    titleAccent: 'Truyện',
-    subtitle: 'Crawl & phát thanh truyện từ truyenfull.today',
+    titleAccent: 'truyện',
+    subtitle: 'Tìm truyện, chọn chương và nghe bằng giọng đọc đã cấu hình.',
   },
 }
 
 export default function App() {
-  // ── Voices ────────────────────────────────────────────────────
   const [voices, setVoices] = useState<Voice[]>([])
   const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null)
 
-  // ── Page ──────────────────────────────────────────────────────
   const [activePage, setActivePage] = useState<Page>('learn')
 
-  // ── Session state ─────────────────────────────────────────────
-  const [learnActive, setLearnActive]           = useState(false)
-  const [storyActive, setStoryActive]           = useState(false)
-  const [videoActive, setVideoActive]           = useState(false)
-  const [videoId, setVideoId]                   = useState<number | null>(null)
+  const [learnActive, setLearnActive] = useState(false)
+  const [storyActive, setStoryActive] = useState(false)
+  const [videoActive, setVideoActive] = useState(false)
+  const [videoId, setVideoId] = useState<number | null>(null)
   const [discussSessionId, setDiscussSessionId] = useState<number | null>(null)
   const videoWsRef = useRef<WebSocket | null>(null)
 
-  // ── Auto-play ─────────────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false)
   const [autoPlayCountdown, setAutoPlayCountdown] = useState(0)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ── Chapter nav ───────────────────────────────────────────────
   const [chapterNavVisible, setChapterNavVisible] = useState(false)
   const [chapterTitle, setChapterTitle] = useState('')
   const prevUrlRef = useRef<string | null>(null)
   const nextUrlRef = useRef<string | null>(null)
 
-  // ── Status ────────────────────────────────────────────────────
   const [statusMsg, setStatusMsg] = useState('')
   const [statusVisible, setStatusVisible] = useState(false)
 
-  // ── Player state ──────────────────────────────────────────────
   const captionRef = useRef<HTMLDivElement>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [progressVisible, setProgressVisible] = useState(false)
@@ -73,21 +67,14 @@ export default function App() {
   const [cardDotState, setCardDotState] = useState<CardDotState>('idle')
   const [currentTopic, setCurrentTopic] = useState('')
 
-  // ── Audio engine ──────────────────────────────────────────────
   const audio = useAudio()
   const volumeRef = useRef(1)
-
-  // ── WebSocket ─────────────────────────────────────────────────
   const wsRef = useRef<WebSocket | null>(null)
-
-  // ── Pending spans queue ───────────────────────────────────────
   const pendingSpansRef = useRef<HTMLElement[]>([])
 
-  // ── History ───────────────────────────────────────────────────
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([])
   const [activeHistoryId, setActiveHistoryId] = useState<number | string | undefined>(undefined)
 
-  // ── Init ──────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/voices')
       .then(r => r.json())
@@ -112,16 +99,15 @@ export default function App() {
     }
   }
 
-  // ── Caption helpers ───────────────────────────────────────────
   function clearCaption() {
     if (!captionRef.current) return
     captionRef.current.innerHTML =
-      '<span class="text-[#2d3a52] italic">Nội dung sẽ xuất hiện ở đây...</span>'
+      '<span class="caption-placeholder">Nội dung sẽ xuất hiện ở đây...</span>'
   }
 
   function appendSentenceSpan(text: string): HTMLElement {
     const el = captionRef.current!
-    const placeholder = el.querySelector('span.italic')
+    const placeholder = el.querySelector('span.caption-placeholder')
     if (placeholder) placeholder.remove()
     const span = document.createElement('span')
     span.className = 'sentence'
@@ -130,7 +116,6 @@ export default function App() {
     return span
   }
 
-  // ── Reset player ──────────────────────────────────────────────
   const resetPlayer = useCallback(() => {
     clearCaption()
     pendingSpansRef.current = []
@@ -147,7 +132,6 @@ export default function App() {
     nextUrlRef.current = null
   }, [audio])
 
-  // ── Handle text WS frame ──────────────────────────────────────
   function handleTextFrame(msg: Record<string, unknown>) {
     if (msg.type === 'status') {
       setStatusMsg(String(msg.data))
@@ -201,7 +185,6 @@ export default function App() {
     }
   }
 
-  // ── Handle binary WS frame ────────────────────────────────────
   async function handleAudioFrame(data: ArrayBuffer) {
     const span = pendingSpansRef.current.shift()
     const cloned = data.slice(0)
@@ -225,7 +208,6 @@ export default function App() {
     }
   }
 
-  // ── Open WebSocket (lesson / story) ───────────────────────────
   function openWs(wsPath: string, payload: object) {
     audio.ensureCtx(volumeRef.current)
     resetPlayer()
@@ -252,14 +234,12 @@ export default function App() {
     return ws
   }
 
-  // ── Reset buttons ─────────────────────────────────────────────
   function resetButtons() {
     setLearnActive(false)
     setStoryActive(false)
     wsRef.current = null
   }
 
-  // ── Cancel auto-play countdown ────────────────────────────────
   function cancelAutoPlay() {
     if (countdownRef.current) {
       clearInterval(countdownRef.current)
@@ -269,7 +249,6 @@ export default function App() {
     setStatusVisible(false)
   }
 
-  // ── Stop ──────────────────────────────────────────────────────
   function stopActive() {
     cancelAutoPlay()
     if (wsRef.current) {
@@ -286,7 +265,6 @@ export default function App() {
     resetButtons()
   }
 
-  // ── Learn session ─────────────────────────────────────────────
   function startLearnSession(topic: string) {
     setDiscussSessionId(null)
     setVideoId(null)
@@ -297,7 +275,6 @@ export default function App() {
     openWs('/ws/lesson', { topic, instruct: selectedVoice?.instruct || '' })
   }
 
-  // ── Video session ─────────────────────────────────────────────
   function startVideoSession(topic: string, nImages: number = 0, durationMinutes: number = 0, videoMode: string = 'i2v') {
     setVideoId(null)
     setVideoActive(true)
@@ -337,7 +314,6 @@ export default function App() {
     }
   }
 
-  // ── Story session ─────────────────────────────────────────────
   function startStorySession(url: string) {
     if (!url) return
     setCurrentTopic(url)
@@ -347,7 +323,6 @@ export default function App() {
     openWs('/ws/story', { url, instruct: selectedVoice?.instruct || '' })
   }
 
-  // ── Replay learn session ──────────────────────────────────────
   async function replayLearnSession(item: HistoryItem) {
     if (!item.id) return
     setActiveHistoryId(item.id)
@@ -386,7 +361,6 @@ export default function App() {
     }
   }
 
-  // ── History select ────────────────────────────────────────────
   function handleHistorySelect(item: HistoryItem) {
     if (activePage === 'story' && item.url) {
       startStorySession(item.url)
@@ -395,131 +369,120 @@ export default function App() {
     }
   }
 
-  // ── Page navigate ─────────────────────────────────────────────
   function handleNavigate(page: Page) {
     if (page === activePage) return
     stopActive()
     setActivePage(page)
   }
 
-  // ── Chapter nav ───────────────────────────────────────────────
   function goToPrev() { if (prevUrlRef.current) startStorySession(prevUrlRef.current) }
   function goToNext() { if (nextUrlRef.current) startStorySession(nextUrlRef.current) }
 
   const meta = PAGE_META[activePage]
   const anyActive = learnActive || storyActive || videoActive
+  const progressPct = totalSentences > 0 ? (playedCount / totalSentences) * 100 : 0
 
   return (
-    <>
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-      <div className="orb orb-4" />
+    <div className={`app-layout mode-${activePage}`}>
+      <NavSidebar
+        activePage={activePage}
+        onNavigate={handleNavigate}
+        historyItems={historyItems}
+        activeHistoryId={activeHistoryId}
+        onHistorySelect={handleHistorySelect}
+      />
 
-      <div className="app-layout">
-        <NavSidebar
-          activePage={activePage}
-          onNavigate={handleNavigate}
-          historyItems={historyItems}
-          activeHistoryId={activeHistoryId}
-          onHistorySelect={handleHistorySelect}
-        />
-
-        <div className="main-content">
-          <div key={activePage} className="page-enter" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-
-            {/* Page header */}
-            <header className="page-header">
-              <div className="page-title-group">
-                <h1 className="page-title">
-                  {meta.title}
-                  <span className={`page-title-accent ${activePage === 'story' ? 'story-accent' : ''}`}>
-                    {' '}{meta.titleAccent}
-                  </span>
-                </h1>
-                <p className="page-subtitle">{meta.subtitle}</p>
-              </div>
-            </header>
-
-            {/* Page body */}
-            <div className="page-body">
-
-              <VoicePicker
-                voices={voices}
-                selectedKey={selectedVoice?.key ?? ''}
-                onSelect={setSelectedVoice}
-              />
-
-              {/* ── Learn page ─────────────────────────────── */}
-              {activePage === 'learn' && (
-                <LearnPage
-                  isActive={learnActive}
-                  onStart={startLearnSession}
-                  onStop={stopActive}
-                  onStartVideo={startVideoSession}
-                  isVideoGenerating={videoActive}
-                />
-              )}
-
-              {/* ── Story page ─────────────────────────────── */}
-              {activePage === 'story' && (
-                <StoryPage
-                  isActive={storyActive}
-                  onStartSession={startStorySession}
-                  onStop={stopActive}
-                  chapterNavVisible={chapterNavVisible}
-                  chapterTitle={chapterTitle}
-                  prevUrl={prevUrlRef.current}
-                  nextUrl={nextUrlRef.current}
-                  onPrev={goToPrev}
-                  onNext={goToNext}
-                  onJump={startStorySession}
-                  autoPlay={autoPlay}
-                  onAutoPlayChange={setAutoPlay}
-                  autoPlayCountdown={autoPlayCountdown}
-                  onCancelAutoPlay={cancelAutoPlay}
-                />
-              )}
-
-              <StatusBar message={statusMsg} visible={statusVisible} />
-
-              {/* ── Video ready banner ─────────────────────── */}
-              {videoId && !anyActive && (
-                <a
-                  href={`/api/video/${videoId}`}
-                  download={`hypnos_${videoId}.mp4`}
-                  className="video-ready-banner"
-                >
-                  <span>🎬 Video sẵn sàng!</span>
-                  <span className="video-ready-btn">Tải xuống MP4 →</span>
-                </a>
-              )}
-
-              <PlayerCard
-                audio={audio}
-                captionRef={captionRef}
-                controlsVisible={controlsVisible}
-                progressVisible={progressVisible}
-                downloadVisible={downloadVisible}
-                totalSentences={totalSentences}
-                playedCount={playedCount}
-                cardDotState={cardDotState}
-                currentTopic={currentTopic}
-              />
-
-              {/* ── Discuss panel ──────────────────────────── */}
-              {activePage === 'learn' && (
-                <DiscussPanel
-                  sessionId={discussSessionId}
-                  instruct={selectedVoice?.instruct || ''}
-                  visible={!!discussSessionId && !learnActive}
-                />
-              )}
-
+      <main className="main-content">
+        <div key={activePage} className="page-enter">
+          <header className="page-header">
+            <div className="page-title-group">
+              <span className="page-kicker">{activePage === 'learn' ? 'Lesson synthesis' : 'Story playback'}</span>
+              <h1 className="page-title">
+                {meta.title}
+                <span className={`page-title-accent ${activePage === 'story' ? 'story-accent' : ''}`}>
+                  {' '}{meta.titleAccent}
+                </span>
+              </h1>
+              <p className="page-subtitle">{meta.subtitle}</p>
             </div>
+            <StudioScene
+              activePage={activePage}
+              active={anyActive}
+              progress={progressPct}
+            />
+          </header>
+
+          <div className="page-body">
+            <VoicePicker
+              voices={voices}
+              selectedKey={selectedVoice?.key ?? ''}
+              onSelect={setSelectedVoice}
+            />
+
+            {activePage === 'learn' && (
+              <LearnPage
+                isActive={learnActive}
+                onStart={startLearnSession}
+                onStop={stopActive}
+                onStartVideo={startVideoSession}
+                isVideoGenerating={videoActive}
+              />
+            )}
+
+            {activePage === 'story' && (
+              <StoryPage
+                isActive={storyActive}
+                onStartSession={startStorySession}
+                onStop={stopActive}
+                chapterNavVisible={chapterNavVisible}
+                chapterTitle={chapterTitle}
+                prevUrl={prevUrlRef.current}
+                nextUrl={nextUrlRef.current}
+                onPrev={goToPrev}
+                onNext={goToNext}
+                onJump={startStorySession}
+                autoPlay={autoPlay}
+                onAutoPlayChange={setAutoPlay}
+                autoPlayCountdown={autoPlayCountdown}
+                onCancelAutoPlay={cancelAutoPlay}
+              />
+            )}
+
+            <StatusBar message={statusMsg} visible={statusVisible} />
+
+            {videoId && !anyActive && (
+              <a
+                href={`/api/video/${videoId}`}
+                download={`hypnos_${videoId}.mp4`}
+                className="video-ready-banner"
+              >
+                <span>Video đã sẵn sàng</span>
+                <span className="video-ready-btn">Tải xuống MP4</span>
+              </a>
+            )}
+
+            <PlayerCard
+              audio={audio}
+              captionRef={captionRef}
+              controlsVisible={controlsVisible}
+              progressVisible={progressVisible}
+              downloadVisible={downloadVisible}
+              totalSentences={totalSentences}
+              playedCount={playedCount}
+              cardDotState={cardDotState}
+              currentTopic={currentTopic}
+            />
+
+            {activePage === 'learn' && (
+              <DiscussPanel
+                sessionId={discussSessionId}
+                instruct={selectedVoice?.instruct || ''}
+                visible={!!discussSessionId && !learnActive}
+              />
+            )}
           </div>
         </div>
-      </div>
-    </>
+      </main>
+    </div>
   )
 }

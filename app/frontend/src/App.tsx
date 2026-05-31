@@ -298,7 +298,7 @@ export default function App() {
   }
 
   // ── Video session ─────────────────────────────────────────────
-  function startVideoSession(topic: string, nImages: number = 0, durationMinutes: number = 0, videoMode: string = 'remotion') {
+  function startVideoSession(topic: string, nImages: number = 0, durationMinutes: number = 0, videoMode: string = 'i2v') {
     setVideoId(null)
     setVideoActive(true)
     setStatusMsg('Đang kết nối...')

@@ -67,10 +67,11 @@ def map_image_timings(
         s_idx = min(p["sentence_index"], n - 1)
         if i + 1 < len(image_prompts):
             e_idx = min(image_prompts[i + 1]["sentence_index"], n - 1)
+            end = sentence_timings[e_idx][0]
         else:
             e_idx = n - 1
+            end = sentence_timings[e_idx][1]
         start = sentence_timings[s_idx][0]
-        end   = sentence_timings[e_idx][1]
         if end <= start:
             end = start + 2.0
         result.append((start, end))

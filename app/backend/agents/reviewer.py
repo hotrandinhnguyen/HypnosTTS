@@ -17,8 +17,22 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
-def _check_length(script: str) -> str | None:
+def _check_length(script: str, target_words: int = 0) -> str | None:
     wc = _word_count(script)
+    if target_words > 0:
+        min_words = max(60, round(target_words * 0.75))
+        max_words = round(target_words * 1.25)
+        if wc < min_words:
+            return (
+                f"Quá ngắn: {wc} từ (mục tiêu khoảng {target_words} từ). "
+                "Mở rộng nội dung nhưng vẫn giữ đúng trọng tâm."
+            )
+        if wc > max_words:
+            return (
+                f"Quá dài: {wc} từ (mục tiêu khoảng {target_words} từ). "
+                "Tóm tắt, gộp ý phụ và cắt ví dụ không cần thiết."
+            )
+        return None
     if wc < MIN_WORDS:
         return f"Quá ngắn: {wc} từ (cần ít nhất {MIN_WORDS} từ). Mở rộng nội dung, đào sâu hơn."
     return None
@@ -77,11 +91,12 @@ def reviewer_node(state: GraphState) -> dict:
     topic = state["topic"]
     analogy = state.get("analogy") or {}
     revision_count = state.get("revision_count", 0)
+    target_words = state.get("target_words", 0)
 
     log.info("[Reviewer] START revision=%d, script_len=%d", revision_count, len(script))
 
     checks = [
-        _check_length(script),
+        _check_length(script, target_words),
         _check_markdown(script),
         _check_numbered_lists(script),
         _check_sentence_length(script),
